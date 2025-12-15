@@ -1,11 +1,20 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
+import os
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
         super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
-app = MyFlaskApp(__name__)
+# Configure Flask with proper template and static folders
+app = MyFlaskApp(__name__,
+                 template_folder='Frontend/templates',
+                 static_folder='Frontend/static',
+                 static_url_path='/static')
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+
+@app.route("/")
+def home():
+    return render_template('index.html')
 
 @app.route("/search")
 def search():
