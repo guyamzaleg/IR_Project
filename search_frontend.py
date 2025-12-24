@@ -1,5 +1,9 @@
+from collections import defaultdict
 from flask import Flask, request, jsonify, render_template
+from Backend.tokenizer import tokenize
+from Backend.data_Loader import load_index, load_pagerank
 import os
+import math
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -11,6 +15,18 @@ app = MyFlaskApp(__name__,
                  static_folder='Frontend/static',
                  static_url_path='/static')
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+
+# Load data once at startup
+print("="*50)
+print("🚀 Starting search engine...")
+print("="*50)
+inverted_index = load_index()
+pagerank_dict = load_pagerank()
+print("✓ All data loaded successfully!")
+print("="*50)
+
+# Global constants
+N_DOCS = 6000000  # Approximate Wikipedia size
 
 @app.route("/")
 def home():
@@ -39,7 +55,34 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    query_tokens = tokenize(query)
+    if not query_tokens:
+        return jsonify(res)
+    
+    # Calculate TF-IDF scores for better relevance ranking
+    doc_scores = defaultdict(float)
+    
+    for term in query_tokens:
+        if term not in inverted_index.posting_locs:
+            continue
+        
+        # Calculate IDF (inverse document frequency)
+        df = inverted_index.df[term]
+        idf = math.log10(N_DOCS / df) if df > 0 else 0
+        
+        # Read posting list for this term (local)
+        posting_list = inverted_index.read_a_posting_list("data/postings_gcp", term)
+        
+        for doc_id, tf in posting_list:
+            # TF-IDF scoring: term frequency * inverse document frequency
+            doc_scores[doc_id] += tf * idf
+    
+    # Sort by relevance score (highest first)
+    sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    # Return list of [doc_id, title] tuples
+    # For now, use doc_id as placeholder for title (we don't have titles yet)
+    res = [[int(doc_id), f"Article {doc_id}"] for doc_id, _ in sorted_docs]
     # END SOLUTION
     return jsonify(res)
 
