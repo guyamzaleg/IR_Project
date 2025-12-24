@@ -244,11 +244,11 @@ def search():
     
     # BEGIN SOLUTION
     query_tokens = tokenize(query)
-    if not query_tokens:
+    if not query_tokens:G
         return jsonify(res)
     
     # Count how many query terms each document has
-    doc_scores = defaultdict(int)
+    doc_scores = defaultdict(int)G
     
     for term in query_tokens:
         if term not in inverted_index.posting_locs:

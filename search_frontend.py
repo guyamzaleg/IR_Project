@@ -16,17 +16,26 @@ app = MyFlaskApp(__name__,
                  static_url_path='/static')
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
-# Load data once at startup
-print("="*50)
-print("🚀 Starting search engine...")
-print("="*50)
-inverted_index = load_index()
-pagerank_dict = load_pagerank()
-print("✓ All data loaded successfully!")
-print("="*50)
-
-# Global constants
+# Global variables for data (loaded once)
+inverted_index = None
+pagerank_dict = None
 N_DOCS = 6000000  # Approximate Wikipedia size
+
+def load_data():
+    """Load data only once, even with Flask's debug reloader."""
+    global inverted_index, pagerank_dict
+    
+    if inverted_index is None or pagerank_dict is None:
+        print("="*50)
+        print("🚀 Starting search engine...")
+        print("="*50)
+        inverted_index = load_index()
+        pagerank_dict = load_pagerank()
+        print("✓ All data loaded successfully!")
+        print("="*50)
+
+# Load data when module is first imported
+load_data()
 
 @app.route("/")
 def home():
@@ -228,4 +237,5 @@ def run(**options):
 
 if __name__ == '__main__':
     # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    # use_reloader=False prevents double loading in debug mode
+    app.run(host='0.0.0.0', port=8080, debug=True, use_reloader=False)
