@@ -9,7 +9,7 @@ import os
 # Add Backend directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Backend'))
 
-from tokenizer import tokenize
+from Backend.tokenizer import tokenize
 
 def test_tokenize():
     """Test tokenization with various inputs."""
