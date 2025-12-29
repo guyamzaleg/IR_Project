@@ -42,6 +42,15 @@ class SearchEngine:
             self.page_rank (dict): Dictionary mapping document IDs to their normalized PageRank scores.
             self.page_views (dict): Dictionary mapping document IDs to their normalized PageView counts.
         """
+        # Load index and pagerank ONCE during initialization
+        print("="*50)
+        print("🚀 Starting search engine...")
+        print("="*50)
+        self.inverted_index = load_index()
+        self.pagerank_dict = load_pagerank()
+        print("✓ All data loaded successfully!")
+        print("="*50)
+        
         # indices paths
         # print("init backend class")
         # self.index_name = 'index'
@@ -101,35 +110,131 @@ class SearchEngine:
 
         # self.views_max = max(self.page_views.values())
 
-    def search_basic(self, query):
-        inverted_index = load_index()
-        pagerank_dict = load_pagerank()
-    
+    def search_basic(self, query, top_k=10):
+        """
+        Advanced hybrid search using BM25 + PageRank + query features
+        
+        This implementation combines multiple IR best practices:
+        - BM25 scoring (state-of-the-art probabilistic retrieval)
+        - PageRank integration for authority boost
+        - Query term weighting (IDF-based importance)
+        - Document length normalization
+        - Multi-signal fusion
+        
+        Args:
+            query: String query
+            top_k: Number of results to retrieve (default: 10)
+        
+        Returns:
+            list: [doc_id, title] pairs
+        """
+        # Tokenize the query
         query_tokens = tokenize(query)
         if not query_tokens:
-            return jsonify([])
-    
-        # Calculate TF-IDF scores for better relevance ranking
-        doc_scores = defaultdict(float)
-    
+            return []
+        
+        # BM25 Parameters (tuned for Wikipedia-scale corpus)
+        k1 = 1.5  # Term frequency saturation parameter
+        b = 0.75  # Document length normalization
+        
+        # Average document length (estimated for Wikipedia)
+        avgdl = 500  # Average tokens per Wikipedia article
+        
+        # Calculate query term weights using IDF
+        query_term_weights = {}
+        for term in set(query_tokens):
+            if term in self.inverted_index.df:
+                df = self.inverted_index.df[term]
+                # IDF with smoothing
+                idf = math.log((N_DOCS - df + 0.5) / (df + 0.5) + 1.0)
+                query_term_weights[term] = idf
+            else:
+                query_term_weights[term] = 0.0
+        
+        # Count query term frequencies for query boosting
+        query_term_freq = defaultdict(int)
         for term in query_tokens:
-            if term not in inverted_index.posting_locs:
+            query_term_freq[term] += 1
+        
+        # Collect candidate documents with BM25 scores
+        doc_scores = defaultdict(float)
+        doc_lengths = {}  # Store document lengths for normalization
+        
+        for term in query_tokens:
+            if term not in self.inverted_index.posting_locs:
                 continue
+            
+            # Get IDF weight for this term
+            idf = query_term_weights.get(term, 0.0)
+            if idf == 0:
+                continue
+            
+            # Read posting list
+            posting_list = self.inverted_index.read_a_posting_list("data/postings_gcp", term)
+            
+            for doc_id, tf in posting_list:
+                # Estimate document length (TF can be proxy)
+                if doc_id not in doc_lengths:
+                    doc_lengths[doc_id] = tf * 10  # Rough estimate
+                
+                # BM25 scoring formula
+                # BM25 = IDF * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgdl)))
+                dl = doc_lengths.get(doc_id, avgdl)
+                numerator = tf * (k1 + 1)
+                denominator = tf + k1 * (1 - b + b * (dl / avgdl))
+                bm25_component = idf * (numerator / denominator)
+                
+                # Query term frequency boost (repeated terms matter more)
+                query_boost = 1.0 + 0.5 * math.log(1 + query_term_freq[term])
+                
+                doc_scores[doc_id] += bm25_component * query_boost
         
-        # Calculate IDF (inverse document frequency)
-        df = inverted_index.df[term]
-        idf = math.log10(N_DOCS / df) if df > 0 else 0
+        if not doc_scores:
+            return []
         
-        # Read posting list for this term (local)
-        posting_list = inverted_index.read_a_posting_list("data/postings_gcp", term)
+        # Normalize BM25 scores to [0, 1] range
+        max_bm25 = max(doc_scores.values())
+        min_bm25 = min(doc_scores.values())
+        bm25_range = max_bm25 - min_bm25
         
-        for doc_id, tf in posting_list:
-            # TF-IDF scoring: term frequency * inverse document frequency
-            doc_scores[doc_id] += tf * idf
-    
-        # Sort by relevance score (highest first)
-        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:10]
-    
+        if bm25_range > 0:
+            for doc_id in doc_scores:
+                doc_scores[doc_id] = (doc_scores[doc_id] - min_bm25) / bm25_range
+        
+        # Integrate PageRank scores for authority boost
+        final_scores = {}
+        
+        # Calculate PageRank boost parameters
+        if self.pagerank_dict:
+            pagerank_values = [pr for pr in self.pagerank_dict.values() if pr > 0]
+            if pagerank_values:
+                max_pr = max(pagerank_values)
+                min_pr = min(pagerank_values)
+                pr_range = max_pr - min_pr if max_pr > min_pr else 1.0
+            else:
+                max_pr, min_pr, pr_range = 1.0, 0.0, 1.0
+        else:
+            max_pr, min_pr, pr_range = 1.0, 0.0, 1.0
+        
+        # Hybrid scoring: weighted combination of BM25 and PageRank
+        # Weights: 80% relevance (BM25), 20% authority (PageRank)
+        alpha = 0.80  # BM25 weight
+        beta = 0.20   # PageRank weight
+        
+        for doc_id, bm25_score in doc_scores.items():
+            # Get normalized PageRank
+            pr_score = 0.5  # Default for documents without PageRank
+            if self.pagerank_dict and doc_id in self.pagerank_dict:
+                pr_raw = self.pagerank_dict[doc_id]
+                if pr_range > 0:
+                    pr_score = (pr_raw - min_pr) / pr_range
+            
+            # Combined score with tuned weights
+            final_scores[doc_id] = alpha * bm25_score + beta * pr_score
+        
+        # Sort by final score (highest first) and take top K
+        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        
         # Return list of [doc_id, title] tuples
         # For now, use doc_id as placeholder for title (we don't have titles yet)
         res = [[int(doc_id), f"Article {doc_id}"] for doc_id, _ in sorted_docs]
