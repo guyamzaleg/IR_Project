@@ -19,7 +19,10 @@ app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 # Global variables for data (loaded once)
 inverted_index = None
 pagerank_dict = None
-N_DOCS = 6000000  # Approximate Wikipedia size
+N_DOCS = 6348910  # Wikipedia size
+
+from search import SearchEngine
+search_engine = SearchEngine()
 
 def load_data():
     """Load data only once, even with Flask's debug reloader."""
@@ -64,34 +67,7 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    query_tokens = tokenize(query)
-    if not query_tokens:
-        return jsonify(res)
-    
-    # Calculate TF-IDF scores for better relevance ranking
-    doc_scores = defaultdict(float)
-    
-    for term in query_tokens:
-        if term not in inverted_index.posting_locs:
-            continue
-        
-        # Calculate IDF (inverse document frequency)
-        df = inverted_index.df[term]
-        idf = math.log10(N_DOCS / df) if df > 0 else 0
-        
-        # Read posting list for this term (local)
-        posting_list = inverted_index.read_a_posting_list("data/postings_gcp", term)
-        
-        for doc_id, tf in posting_list:
-            # TF-IDF scoring: term frequency * inverse document frequency
-            doc_scores[doc_id] += tf * idf
-    
-    # Sort by relevance score (highest first)
-    sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:10]
-    
-    # Return list of [doc_id, title] tuples
-    # For now, use doc_id as placeholder for title (we don't have titles yet)
-    res = [[int(doc_id), f"Article {doc_id}"] for doc_id, _ in sorted_docs]
+    res = search_engine.search_basic(query)
     # END SOLUTION
     return jsonify(res)
 
@@ -116,7 +92,7 @@ def search_body():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    res =search_engine.search_body(query)
     # END SOLUTION
     return jsonify(res)
 
@@ -146,7 +122,7 @@ def search_title():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    res =search_engine.search_title(query)
     # END SOLUTION
     return jsonify(res)
 
@@ -176,7 +152,7 @@ def search_anchor():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    
+    res = search_engine.search_anchor(query)
     # END SOLUTION
     return jsonify(res)
 
@@ -201,7 +177,7 @@ def get_pagerank():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    res = search_engine.pagerank(wiki_ids)
     # END SOLUTION
     return jsonify(res)
 
@@ -228,7 +204,7 @@ def get_pageview():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    res = search_engine.pageview(wiki_ids)
     # END SOLUTION
     return jsonify(res)
 
