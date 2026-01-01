@@ -21,7 +21,7 @@ inverted_index = None
 pagerank_dict = None
 N_DOCS = 6348910  # Wikipedia size
 
-from search import SearchEngine
+from query_engine import SearchEngine
 search_engine = SearchEngine()
 
 # def load_data():
