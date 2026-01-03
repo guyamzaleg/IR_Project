@@ -72,7 +72,7 @@ def cosine_similarity(tokenized_query, index):
     results = Counter()
 
     for token in tokenized_query:
-        pl = index.read_a_posting_list(".", token)
+        pl = index.read_a_posting_list("data/postings_gcp", token)
         if pl == []:
             continue
         else:
@@ -111,7 +111,7 @@ def BM25_score(tokenized_query, index, doc_num, doc_lengths, avg_doc_length, k1=
     candidates_dict = {}  # Initialize a dictionary to store candidates of retrieval
 
     for token in tokenized_query:
-        pl = index.read_a_posting_list(".", token)
+        pl = index.read_a_posting_list("data/postings_gcp", token)
         if pl == []:
             continue
         else:
@@ -145,7 +145,7 @@ def word_count_score(tokenized_query, index):
     candidates_dict = {}  # Initialize a regular dictionary
     doc_term_counts = Counter()
     for token in tokenized_query:
-        pl = index.read_a_posting_list(".", token)
+        pl = index.read_a_posting_list("data/postings_gcp", token)
         if pl == []:
             continue
         else:
@@ -170,7 +170,7 @@ def tf_count_score(tokenized_query, index):
     doc_tf_scores = Counter()
 
     for token in tokenized_query:
-        pl = index.read_a_posting_list(".", token)
+        pl = index.read_a_posting_list("data/postings_gcp", token)
         if pl == []:
             continue
         else:

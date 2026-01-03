@@ -3,11 +3,14 @@ import pandas as pd
 import os
 from inverted_index_gcp import InvertedIndex
 
-def load_index():
-    """Load the inverted index from local disk."""
-    print("Loading inverted index...")
-    index = InvertedIndex.read_index("data/postings_gcp", "index")
-    print(f"✓ Index loaded: {len(index.df)} terms")
+def load_index(type):
+    if type == "text":
+        index = InvertedIndex.read_index("data/postings_gcp", "index")
+    if type == "title":
+        index = InvertedIndex.read_index("data/postings_gcp", "title_index")
+    if type == "anchor":
+        index = InvertedIndex.read_index("data/postings_gcp", "anchor_index")
+    print(f"✓ {type.capitalize()} Index loaded: {len(index.df)} terms")
     return index
 
 def load_pagerank():
@@ -38,3 +41,36 @@ def load_pagerank():
 #     """Load PageRank scores from CSV."""
 #     print("Loading PageRank...")
     
+def load_pageviews() -> dict:
+    """Load PageViews from pickle file."""
+    print("Loading PageViews...")
+    path = 'pv/pageview.pkl'
+    
+    try:
+        with open(path, 'rb') as f:
+            pageviews = pickle.load(f)
+        print(f"✓ PageViews: {len(pageviews)} documents")
+        return pageviews
+    except FileNotFoundError:
+        print(f"⚠️ PageViews not found: {path}")
+        return {}
+
+
+def load_doc_titles() -> dict:
+    """Load document titles from even/odd pickle files."""
+    print("Loading document titles...")
+    
+    even_path = 'id_title/even_id_title_dict.pkl'
+    odd_path = 'id_title/uneven_id_title_dict.pkl'
+    
+    titles = {}
+    
+    for path in [even_path, odd_path]:
+        try:
+            with open(path, 'rb') as f:
+                titles.update(pickle.load(f))
+        except FileNotFoundError:
+            print(f"⚠️ Not found: {path}")
+    
+    print(f"✓ Titles: {len(titles)} documents")
+    return titles

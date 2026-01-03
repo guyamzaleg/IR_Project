@@ -1,394 +1,476 @@
-import time
-from collections import Counter
-import gzip
-import re
+"""
+Search Engine Query Processing Module
+
+This module provides the main SearchEngine class that orchestrates
+search operations by combining ranking algorithms and data sources.
+
+Single Responsibility: Coordinate search operations and combine signals
+"""
+
 import math
-from io import BytesIO
-from flask import jsonify
-import numpy as np
-import pandas as pd
-from collections import Counter
-from nltk.stem.porter import *
-from nltk.corpus import stopwords
-from nltk.corpus import wordnet
-import nltk
-import builtins
-from inverted_index_gcp import *
-nltk.download('stopwords')
+from collections import defaultdict
+from typing import List, Tuple, Dict, Optional
 
-from Backend.ranking import *
-from Backend.tokenizer import *
-from Backend.data_Loader import load_index, load_pagerank
+from Backend.ranking import BM25_score, word_count_score, cosine_similarity
+from Backend.tokenizer import tokenize, og_tokenize
+from Backend.data_Loader import load_index, load_pagerank, load_pageviews, load_doc_titles
+from inverted_index_gcp import InvertedIndex
 
-N_DOCS = 6348910  # Wikipedia size (from hw3)
+# Constants
+N_DOCS = 6348910  # Wikipedia corpus size
+DEFAULT_AVGDL = 500  # Average document length estimate
+
+# BM25 tuning parameters
+DEFAULT_K1 = 1.5
+DEFAULT_B = 0.75
+
+# Hybrid scoring weights
+DEFAULT_BM25_WEIGHT = 0.80
+DEFAULT_PAGERANK_WEIGHT = 0.20
+
 
 class SearchEngine:
+    """
+    Main search engine orchestrator.
+    
+    Responsibilities:
+    - Load and cache data sources (indices, pagerank, etc.)
+    - Coordinate different search strategies
+    - Combine ranking signals (BM25, PageRank, PageViews)
+    - Return formatted results
+    """
+    
     def __init__(self):
-        """
-        Class to encapsulate and manage search indices and related data.
-
-        Attributes:
-            self.index_name : string of index name.
-            self.text_index (InvertedIndex): Inverted index for document text content.
-            self.title_index (InvertedIndex): Inverted index for document titles.
-            self.anchor_index (InvertedIndex): Inverted index for anchor text.
-            self.text_doc_len_dict (dict): Dictionary mapping document IDs to their lengths (in terms of number of words) for text content.
-            self.title_doc_len_dict (dict): Dictionary mapping document IDs to their lengths (in terms of words) for titles.
-            self.corpus_size (int): Total number of documents in the corpus.
-            self.text_avg_doc_len (float): Average document length (in terms of words) for text content.
-            self.title_avg_doc_len (float): Average document length (in terms of words) for titles.
-            self.doc_id_title_even_dict (dict): Dictionary mapping even document IDs to their corresponding titles.
-            self.doc_id_title_odd_dict (dict): Dictionary mapping odd document IDs to their corresponding titles.
-            self.page_rank (dict): Dictionary mapping document IDs to their normalized PageRank scores.
-            self.page_views (dict): Dictionary mapping document IDs to their normalized PageView counts.
-        """
-        # Load index and pagerank ONCE during initialization
-        print("="*50)
-        print("🚀 Starting search engine...")
-        print("="*50)
-        self.inverted_index = load_index()
+        """Initialize search engine and load all necessary data."""
+        print("🔧 Initializing Search Engine...")
+        
+        # Load indices
+        self.text_index = load_index("text")
+        self.title_index = load_index("title")
+        self.anchor_index = load_index("anchor")
+        
+        # Load auxiliary data
         self.pagerank_dict = load_pagerank()
-        print("✓ All data loaded successfully!")
-        print("="*50)
+        self.pageviews_dict = load_pageviews()
+        self.doc_titles_dict = load_doc_titles()
         
-        # indices paths
-        # print("init backend class")
-        # self.index_name = 'index'
-        # self.text_idx_path = 'text_stemmed'
-        # self.title_idx_path = 'title_stemmed'
-        # self.anchor_idx_path = 'anchor_stemmed'
-
-        # # indexes paths for specific query functions
-        # self.og_anchor_idx_path = 'og_anchor_idx'
-        # self.og_text_idx_path = 'og_text_idx'
-        # self.og_title_idx_path = 'og_title_idx'
-
-        # # documents length dictionaries paths
-        # text_doc_len_path = 'text_stemmed/text_doc_lengths.pickle'
-        # title_doc_len_path = 'title_stemmed/title_doc_lengths.pickle'
-
-        # # indices data members
-        # self.text_index = InvertedIndex.read_index(self.text_idx_path, self.index_name)
-        # self.title_index = InvertedIndex.read_index(self.title_idx_path, self.index_name)
-        # self.anchor_index = InvertedIndex.read_index(self.anchor_idx_path, self.index_name)
-
-        # # Document length dict data members
-        # with open(text_doc_len_path, "rb") as file:
-        #     self.text_doc_len_dict = pickle.load(file)
-
-
-        # with open(title_doc_len_path, "rb") as file:
-        #     self.title_doc_len_dict = pickle.load(file)
-
-
-        # # corpus size and average doc length data members
-        # self.corpus_size = 6348910  # from the gcp ipynb notebook
-        # self.text_avg_doc_len = builtins.sum(self.text_doc_len_dict.values()) / self.corpus_size
-        # self.title_avg_doc_len = builtins.sum(self.title_doc_len_dict.values()) / self.corpus_size
-
-        # # doc_id - title dict data member
-        # doc_id_title_even_path = 'id_title/even_id_title_dict.pkl'
-        # doc_id_title_odd_path = 'id_title/uneven_id_title_dict.pkl'
-
-        # with open(doc_id_title_even_path, "rb") as file:
-        #     self.doc_id_title_even_dict = pickle.load(file)
-
-        # with open(doc_id_title_odd_path, "rb") as file:
-        #     self.doc_id_title_odd_dict = pickle.load(file)
-
-        # # PageRank data member
-        # pageRank_path = 'pr/part-00000-65f8552b-1b0d-4846-8d4e-74cf90eec0b7-c000.csv.gz'
-        # page_ranks = pd.read_csv(pageRank_path, compression='gzip', header=None, index_col=0).squeeze(
-        #     "columns").to_dict()
-        # ranks_max = max(page_ranks.values()) # Normalize the page ranks
-        # self.page_rank = {id: rank / ranks_max for id, rank in page_ranks.items()}
-
-        # # PageView data member
-        # pageViews_path = 'pv/pageview.pkl' # a pickle to a dictionary
-        # with open(pageViews_path, "rb") as file:
-        #     self.page_views = pickle.load(file)
-
-        # self.views_max = max(self.page_views.values())
-
-    def search_basic(self, query, top_k=10):
+        # Precompute PageRank normalization parameters
+        self._precompute_pagerank_params()
+        
+        # Precompute PageViews normalization
+        self._precompute_pageviews_params()
+        
+        print("✅ Search Engine Initialized!")
+    
+    def _precompute_pagerank_params(self):
+        """Precompute PageRank normalization parameters for efficiency."""
+        if self.pagerank_dict:
+            pagerank_values = [pr for pr in self.pagerank_dict.values() if pr > 0]
+            if pagerank_values:
+                self.pr_max = max(pagerank_values)
+                self.pr_min = min(pagerank_values)
+                self.pr_range = self.pr_max - self.pr_min if self.pr_max > self.pr_min else 1.0
+            else:
+                self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
+        else:
+            self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
+    
+    def _precompute_pageviews_params(self):
+        """Precompute PageViews normalization parameters."""
+        if self.pageviews_dict:
+            self.pv_max = max(self.pageviews_dict.values())
+        else:
+            self.pv_max = 1.0
+    
+    def _get_normalized_pagerank(self, doc_id: int) -> float:
         """
-        Advanced hybrid search using BM25 + PageRank + query features
-        
-        This implementation combines multiple IR best practices:
-        - BM25 scoring (state-of-the-art probabilistic retrieval)
-        - PageRank integration for authority boost
-        - Query term weighting (IDF-based importance)
-        - Document length normalization
-        - Multi-signal fusion
+        Get normalized PageRank score for a document.
         
         Args:
-            query: String query
-            top_k: Number of results to retrieve (default: 10)
+            doc_id: Document ID
         
         Returns:
-            list: [doc_id, title] pairs
+            Normalized PageRank score [0, 1]
         """
-        # Tokenize the query
-        query_tokens = tokenize(query)
-        if not query_tokens:
+        if not self.pagerank_dict or doc_id not in self.pagerank_dict:
+            return 0.5  # Neutral default
+        
+        pr_raw = self.pagerank_dict[doc_id]
+        if self.pr_range > 0:
+            return (pr_raw - self.pr_min) / self.pr_range
+        return 0.5
+    
+    def _get_normalized_pageviews(self, doc_id: int) -> float:
+        """
+        Get normalized PageViews score for a document.
+        
+        Args:
+            doc_id: Document ID
+        
+        Returns:
+            Normalized PageViews score [0, 1]
+        """
+        if not self.pageviews_dict or doc_id not in self.pageviews_dict:
+            return 0.0
+        
+        return self.pageviews_dict[doc_id] / self.pv_max if self.pv_max > 0 else 0.0
+    
+    def _format_results(self, doc_ids: List[int]) -> List[Tuple[str, str]]:
+        """
+        Format document IDs with titles.
+        
+        Args:
+            doc_ids: List of document IDs
+        
+        Returns:
+            List of (doc_id_str, title) tuples
+        """
+        results = []
+        for doc_id in doc_ids:
+            title = self.doc_titles_dict.get(doc_id, f"Document {doc_id}")
+            results.append((str(doc_id), title))
+        return results
+    
+    # ========================================================================
+    # PRIMARY SEARCH METHOD (Main endpoint)
+    # ========================================================================
+    
+    def search(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        # Tokenize query
+        tokens = tokenize(query)
+        if not tokens:
             return []
         
-        # BM25 Parameters (tuned for Wikipedia-scale corpus)
-        k1 = 1.5  # Term frequency saturation parameter
-        b = 0.75  # Document length normalization
+        # Get BM25 scores from text and title indices
+        text_scores = self._get_text_bm25_scores(tokens, top_n=500)
+        title_scores = self._get_title_bm25_scores(tokens, top_n=500)
+        anchor_scores = self._get_anchor_scores(tokens, top_n=500)
         
-        # Average document length (estimated for Wikipedia)
-        avgdl = 500  # Average tokens per Wikipedia article
+        # Combine signals with tuned weights
+        combined_scores = self._combine_all_signals(
+            text_scores, 
+            title_scores,
+            anchor_scores,
+            text_weight=1.5,
+            title_weight=1.2,
+            anchor_weight=0.8,
+            pr_weight=0.4,
+            pv_weight=0.6
+        )
         
-        # Calculate query term weights using IDF
+        # Sort and take top K
+        sorted_docs = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        doc_ids = [doc_id for doc_id, _ in sorted_docs]
+        
+        return self._format_results(doc_ids)
+    
+    # ========================================================================
+    # BASIC SEARCH (Simplified hybrid approach)
+    # ========================================================================
+    
+    def search_basic(self, query: str, top_k: int = 10) -> List[List]:
+        """
+        Basic hybrid search for testing - BM25 + PageRank.
+        
+        Simplified version optimized for quick queries.
+        Returns format: [[doc_id, title], ...]
+        
+        Args:
+            query: Search query string
+            top_k: Number of results (default: 10)
+        
+        Returns:
+            List of [doc_id, title] pairs
+        """
+        tokens = tokenize(query)
+        if not tokens:
+            return []
+        
+        # Calculate BM25 scores
+        doc_scores = self._calculate_bm25_scores(tokens)
+        
+        if not doc_scores:
+            return []
+        
+        # Normalize BM25 scores
+        doc_scores = self._normalize_scores(doc_scores)
+        
+        # Combine with PageRank
+        final_scores = {}
+        for doc_id, bm25_score in doc_scores.items():
+            pr_score = self._get_normalized_pagerank(doc_id)
+            final_scores[doc_id] = (DEFAULT_BM25_WEIGHT * bm25_score + 
+                                   DEFAULT_PAGERANK_WEIGHT * pr_score)
+        
+        # Sort and format
+        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        
+        results = []
+        for doc_id, _ in sorted_docs:
+            title = self.doc_titles_dict.get(doc_id, f"Article {doc_id}")
+            results.append([int(doc_id), title])
+        
+        return results
+    
+    # ========================================================================
+    # PARTIAL SEARCH METHODS (Body, Title, Anchor)
+    # ========================================================================
+    
+    def search_body(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        return self._search_partial_index(query, self.text_index, top_k)
+    
+    def search_title(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        return self._search_partial_index(query, self.title_index, top_k)
+    
+    def search_anchor(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        return self._search_partial_index(query, self.anchor_index, top_k)
+    
+    # ========================================================================
+    # PARAMETERIZED SEARCH (For experimentation/tuning)
+    # ========================================================================
+    
+    def search_custom(
+        self, 
+        query: str,
+        text_weight: float = 0.65,
+        title_weight: float = 0.25,
+        anchor_weight: float = 0.1,
+        pr_weight: float = 1.0,
+        pv_weight: float = 1.0,
+        k1: float = 1.2,
+        b: float = 0.5,
+        top_k: int = 100
+    ) -> List[Tuple[str, str]]:
+        """
+        Customizable search with adjustable weights and parameters.
+        
+        Useful for experimentation and parameter tuning.
+        
+        Args:
+            query: Search query
+            text_weight: Weight for text index BM25 scores
+            title_weight: Weight for title index scores
+            anchor_weight: Weight for anchor index scores
+            pr_weight: Weight for PageRank
+            pv_weight: Weight for PageViews
+            k1: BM25 k1 parameter
+            b: BM25 b parameter
+            top_k: Number of results
+        
+        Returns:
+            List of (doc_id, title) tuples
+        """
+        tokens = tokenize(query)
+        if not tokens:
+            return []
+        
+        # Get scores from each index
+        text_scores = BM25_score(
+            tokens, self.text_index, N_DOCS, 
+            {}, DEFAULT_AVGDL, k1=k1, b=b
+        ).most_common(500)
+        
+        title_scores = word_count_score(tokens, self.title_index).most_common(500)
+        anchor_scores = word_count_score(tokens, self.anchor_index).most_common(500)
+        
+        # Normalize scores
+        text_scores = self._normalize_score_list(text_scores)
+        title_scores = self._normalize_score_list(title_scores)
+        anchor_scores = self._normalize_score_list(anchor_scores)
+        
+        # Convert to dicts
+        text_dict = dict(text_scores)
+        title_dict = dict(title_scores)
+        anchor_dict = dict(anchor_scores)
+        
+        # Combine all signals
+        all_doc_ids = set(text_dict) | set(title_dict) | set(anchor_dict)
+        
+        final_scores = {}
+        for doc_id in all_doc_ids:
+            score = (
+                text_dict.get(doc_id, 0.0) * text_weight +
+                title_dict.get(doc_id, 0.0) * title_weight +
+                anchor_dict.get(doc_id, 0.0) * anchor_weight +
+                self._get_normalized_pagerank(doc_id) * pr_weight +
+                self._get_normalized_pageviews(doc_id) * pv_weight
+            )
+            final_scores[doc_id] = score
+        
+        # Sort and return top K
+        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        doc_ids = [doc_id for doc_id, _ in sorted_docs]
+        
+        return self._format_results(doc_ids)
+    
+    # ========================================================================
+    # UTILITY METHODS (For individual endpoints)
+    # ========================================================================
+    
+    def get_pagerank(self, doc_ids: List[int]) -> List[float]:
+        """
+        Get PageRank scores for a list of document IDs.
+        
+        Args:
+            doc_ids: List of document IDs
+        
+        Returns:
+            List of PageRank scores
+        """
+        return [self.pagerank_dict.get(doc_id, 0.0) for doc_id in doc_ids]
+    
+    def get_pageviews(self, doc_ids: List[int]) -> List[int]:
+        """
+        Get PageView counts for a list of document IDs.
+        
+        Args:
+            doc_ids: List of document IDs
+        
+        Returns:
+            List of PageView counts
+        """
+        return [self.pageviews_dict.get(doc_id, 0) for doc_id in doc_ids]
+    
+    def get_doc_titles(self, doc_ids: List[int]) -> List[str]:
+        """
+        Get document titles for a list of document IDs.
+        
+        Args:
+            doc_ids: List of document IDs
+        
+        Returns:
+            List of document titles
+        """
+        return [self.doc_titles_dict.get(doc_id, f"Document {doc_id}") for doc_id in doc_ids]
+    
+    # ========================================================================
+    # PRIVATE HELPER METHODS
+    # ========================================================================
+    
+    def _calculate_bm25_scores(self, tokens: List[str]) -> Dict[int, float]:
+        """Calculate BM25 scores for query tokens."""
+        doc_scores = defaultdict(float)
+        query_term_freq = defaultdict(int)
+        
+        # Count query term frequencies
+        for term in tokens:
+            query_term_freq[term] += 1
+        
+        # Calculate IDF weights
         query_term_weights = {}
-        for term in set(query_tokens):
-            if term in self.inverted_index.df:
-                df = self.inverted_index.df[term]
-                # IDF with smoothing
+        for term in set(tokens):
+            if term in self.text_index.df:
+                df = self.text_index.df[term]
                 idf = math.log((N_DOCS - df + 0.5) / (df + 0.5) + 1.0)
                 query_term_weights[term] = idf
             else:
                 query_term_weights[term] = 0.0
         
-        # Count query term frequencies for query boosting
-        query_term_freq = defaultdict(int)
-        for term in query_tokens:
-            query_term_freq[term] += 1
-        
-        # Collect candidate documents with BM25 scores
-        doc_scores = defaultdict(float)
-        doc_lengths = {}  # Store document lengths for normalization
-        
-        for term in query_tokens:
-            if term not in self.inverted_index.posting_locs:
+        # Score documents
+        for term in tokens:
+            if term not in self.text_index.posting_locs:
                 continue
             
-            # Get IDF weight for this term
             idf = query_term_weights.get(term, 0.0)
             if idf == 0:
                 continue
             
-            # Read posting list
-            posting_list = self.inverted_index.read_a_posting_list("data/postings_gcp", term)
+            posting_list = self.text_index.read_a_posting_list("data/postings_gcp", term)
             
             for doc_id, tf in posting_list:
-                # Estimate document length (TF can be proxy)
-                if doc_id not in doc_lengths:
-                    doc_lengths[doc_id] = tf * 10  # Rough estimate
-                
-                # BM25 scoring formula
-                # BM25 = IDF * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgdl)))
-                dl = doc_lengths.get(doc_id, avgdl)
-                numerator = tf * (k1 + 1)
-                denominator = tf + k1 * (1 - b + b * (dl / avgdl))
+                # BM25 formula
+                numerator = tf * (DEFAULT_K1 + 1)
+                denominator = tf + DEFAULT_K1 * (1 - DEFAULT_B + DEFAULT_B * (tf * 10 / DEFAULT_AVGDL))
                 bm25_component = idf * (numerator / denominator)
                 
-                # Query term frequency boost (repeated terms matter more)
+                # Query boost
                 query_boost = 1.0 + 0.5 * math.log(1 + query_term_freq[term])
                 
                 doc_scores[doc_id] += bm25_component * query_boost
         
-        if not doc_scores:
+        return doc_scores
+    
+    def _normalize_scores(self, scores: Dict[int, float]) -> Dict[int, float]:
+        """Normalize scores to [0, 1] range."""
+        if not scores:
+            return {}
+        
+        max_score = max(scores.values())
+        min_score = min(scores.values())
+        score_range = max_score - min_score
+        
+        if score_range > 0:
+            return {doc_id: (score - min_score) / score_range for doc_id, score in scores.items()}
+        return scores
+    
+    def _normalize_score_list(self, score_list: List[Tuple[int, float]]) -> List[Tuple[int, float]]:
+        """Normalize a list of (doc_id, score) tuples."""
+        if not score_list:
             return []
         
-        # Normalize BM25 scores to [0, 1] range
-        max_bm25 = max(doc_scores.values())
-        min_bm25 = min(doc_scores.values())
-        bm25_range = max_bm25 - min_bm25
-        
-        if bm25_range > 0:
-            for doc_id in doc_scores:
-                doc_scores[doc_id] = (doc_scores[doc_id] - min_bm25) / bm25_range
-        
-        # Integrate PageRank scores for authority boost
-        final_scores = {}
-        
-        # Calculate PageRank boost parameters
-        if self.pagerank_dict:
-            pagerank_values = [pr for pr in self.pagerank_dict.values() if pr > 0]
-            if pagerank_values:
-                max_pr = max(pagerank_values)
-                min_pr = min(pagerank_values)
-                pr_range = max_pr - min_pr if max_pr > min_pr else 1.0
-            else:
-                max_pr, min_pr, pr_range = 1.0, 0.0, 1.0
-        else:
-            max_pr, min_pr, pr_range = 1.0, 0.0, 1.0
-        
-        # Hybrid scoring: weighted combination of BM25 and PageRank
-        # Weights: 80% relevance (BM25), 20% authority (PageRank)
-        alpha = 0.80  # BM25 weight
-        beta = 0.20   # PageRank weight
-        
-        for doc_id, bm25_score in doc_scores.items():
-            # Get normalized PageRank
-            pr_score = 0.5  # Default for documents without PageRank
-            if self.pagerank_dict and doc_id in self.pagerank_dict:
-                pr_raw = self.pagerank_dict[doc_id]
-                if pr_range > 0:
-                    pr_score = (pr_raw - min_pr) / pr_range
-            
-            # Combined score with tuned weights
-            final_scores[doc_id] = alpha * bm25_score + beta * pr_score
-        
-        # Sort by final score (highest first) and take top K
-        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        
-        # Return list of [doc_id, title] tuples
-        # For now, use doc_id as placeholder for title (we don't have titles yet)
-        res = [[int(doc_id), f"Article {doc_id}"] for doc_id, _ in sorted_docs]
-        return res
-
-    def search(self, query):
-        # tokenize the query and create candidates dictionaries for each index
-        tokenized_query = tokenize(query)
-
-        # collect scores for query in text index using bm25
-        bm25_scores_text = BM25_score(tokenized_query, self.text_index, self.corpus_size,
-                                        self.text_doc_len_dict, self.text_avg_doc_len, k1=1.2, b=0.6)
-        text_bm25_scores_top_500 = bm25_scores_text.most_common(500)
-
-        # normalize text scores
-        text_max_score = text_bm25_scores_top_500[0][1]
-
-        # collect scores for query in title index using binary word count
-        word_count_scores_title = BM25_score(tokenized_query, self.title_index, self.corpus_size, self.title_doc_len_dict,
-                                             self.title_avg_doc_len, k1=1.5, b=0.4)
-        title_word_count_scores_top_500 = word_count_scores_title.most_common(500)
-
-        # normalize title scores
-        title_max_score = title_word_count_scores_top_500[0][1]
-
-        text_bm25_dict = {key: value/text_max_score  for key, value in text_bm25_scores_top_500}
-        title_word_count_dict = {key :value/title_max_score for key, value in title_word_count_scores_top_500}
-
-
-        # combine the 500 most common doc_ids from the three indices scores with the page rank and page views
-        text_weight = 1.9
-        title_weight = 1.1
-        pr_weight = 0.4
-        pv_weight = 0.6
-
-
-        weighted_scores = [
-            (doc_id,
-             text_bm25_dict.get(doc_id, 0.0) * text_weight +
-             title_word_count_dict.get(doc_id, 0.0) * title_weight +
-             self.page_rank.get(doc_id, 0.0) * pr_weight +
-             self.page_views.get(doc_id, 0.0) * pv_weight / self.views_max)
-            for doc_id in set(text_bm25_dict) | set(title_word_count_dict)
-        ]
-
-
-        # sort the combined scores, transform to a list of top 100 doc_ids
-        sorted_scores = sorted(weighted_scores, key=lambda x: x[1], reverse=True)
-        res = []
-        for doc_id, _ in sorted_scores[:100]:
-            if doc_id % 2 == 0:
-                res.append((str(doc_id), self.doc_id_title_even_dict.get(doc_id)))
-            else:
-                res.append((str(doc_id), self.doc_id_title_odd_dict.get(doc_id)))
-        return res
+        max_score = score_list[0][1]  # Assuming sorted
+        if max_score > 0:
+            return [(doc_id, score / max_score) for doc_id, score in score_list]
+        return score_list
     
-    def search_partial(self, query, partial_index):
+    def _get_text_bm25_scores(self, tokens: List[str], top_n: int = 500) -> Dict[int, float]:
+        """Get BM25 scores from text index."""
+        scores = BM25_score(tokens, self.text_index, N_DOCS, {}, DEFAULT_AVGDL, k1=1.2, b=0.6)
+        top_scores = scores.most_common(top_n)
+        return dict(self._normalize_score_list(top_scores))
+    
+    def _get_title_bm25_scores(self, tokens: List[str], top_n: int = 500) -> Dict[int, float]:
+        """Get BM25 scores from title index."""
+        scores = BM25_score(tokens, self.title_index, N_DOCS, {}, DEFAULT_AVGDL, k1=1.5, b=0.4)
+        top_scores = scores.most_common(top_n)
+        return dict(self._normalize_score_list(top_scores))
+    
+    def _get_anchor_scores(self, tokens: List[str], top_n: int = 500) -> Dict[int, float]:
+        """Get word count scores from anchor index."""
+        scores = word_count_score(tokens, self.anchor_index)
+        top_scores = scores.most_common(top_n)
+        return dict(self._normalize_score_list(top_scores))
+    
+    def _combine_all_signals(
+        self, 
+        text_scores: Dict[int, float],
+        title_scores: Dict[int, float],
+        anchor_scores: Dict[int, float],
+        text_weight: float = 1.5,
+        title_weight: float = 1.2,
+        anchor_weight: float = 0.8,
+        pr_weight: float = 0.4,
+        pv_weight: float = 0.6
+    ) -> Dict[int, float]:
+        """Combine text, title, anchor, PageRank, and PageViews signals."""
+        all_docs = set(text_scores) | set(title_scores) | set(anchor_scores)
+        
+        combined = {}
+        for doc_id in all_docs:
+            score = (
+                text_scores.get(doc_id, 0.0) * text_weight +
+                title_scores.get(doc_id, 0.0) * title_weight +
+                anchor_scores.get(doc_id, 0.0) * anchor_weight +
+                self._get_normalized_pagerank(doc_id) * pr_weight +
+                self._get_normalized_pageviews(doc_id) * pv_weight
+            )
+            combined[doc_id] = score
+        
+        return combined
+    
+    def _search_partial_index(
+        self, 
+        query: str, 
+        index: InvertedIndex, 
+        top_k: int = 100
+    ) -> List[Tuple[str, str]]:
+        """Search a single index using cosine similarity."""
         tokens = og_tokenize(query)
-        scored = cosine_similarity(tokens, partial_index)
-        top_100 = scored.most_common(100)
-        res = []
-        for doc_id, _ in top_100:
-            if doc_id % 2 == 0:
-                res.append((str(doc_id), self.doc_id_title_even_dict.get(doc_id)))
-            else:
-                res.append((str(doc_id), self.doc_id_title_odd_dict.get(doc_id)))
-        return res
-
-    def search_body(self, query):
-        og_text_index = InvertedIndex.read_index(self.og_text_idx_path, self.index_name)
-        return self.search_partial(query, og_text_index)
-
-    def search_title(self, query):
-        og_title_index = InvertedIndex.read_index(self.og_title_idx_path, self.index_name)
-        return self.search_partial(query, og_title_index)
-
-    def search_anchor(self, query):
-        og_anchor_index = InvertedIndex.read_index(self.og_anchor_idx_path, self.index_name)
-        return self.search_partial(query, og_anchor_index)
-
-    def pagerank(self, page_ids):
-        res = []
-        for id in page_ids:
-            res.append(self.page_rank.get(id, 0.0))
-        return res
-
-
-    def pageview(self, page_ids):
-        res = []
-        for id in page_ids:
-            res.append(self.page_views.get(id, 0.0))
-        return res
-
-
-    def doc_titles(self,id_list):
-        res = []
-        for id in id_list:
-            if id % 2 == 0:
-                res.append(self.doc_id_title_even_dict.get(id))
-            else:
-                res.append(self.doc_id_title_odd_dict.get(id))
-        return res
-
-
-    def search_prm(self, query, in_text_weight = 0.65 ,in_title_weight = 0.25,in_anchor_weight = 0.1 ,in_pr_weight = 1 ,in_pv_weight = 1,k=1.2,b=0.5):
-        # tokenize the query and create candidates dictionaries for each index
-        tokenized_query = tokenize(query)
-
-        # collect scores for query in text index using bm25
-        bm25_scores_text = BM25_score(tokenized_query, self.text_index, self.corpus_size,
-                                        self.text_doc_len_dict, self.text_avg_doc_len, k1=k, b=b)
-        text_bm25_scores_top_500 = bm25_scores_text.most_common(500)
-
-        # normalize text scores
-        text_max_score = text_bm25_scores_top_500[0][1]
-        text_bm25_scores_top_500 = [(pair[0], pair[1]/text_max_score) for pair in text_bm25_scores_top_500]
-
-        # collect scores for query in title index using binary word count
-        word_count_scores_title = word_count_score(tokenized_query, self.title_index)
-        title_word_count_scores_top_500 = word_count_scores_title.most_common(500)
-
-        # normalize title scores
-        title_max_score = title_word_count_scores_top_500[0][1]
-        title_word_count_scores_top_500 = [(pair[0], pair[1]/title_max_score) for pair in title_word_count_scores_top_500]
-
-        # collect and merge scores for query in anchor index using word count
-        word_count_scores_anchor = word_count_score(tokenized_query, self.anchor_index)
-        anchor_word_count_scores_top_500 = word_count_scores_anchor.most_common(500)
-
-        # normalize anchor scores
-        anchor_max_score = anchor_word_count_scores_top_500[0][1]
-        anchor_word_count_scores_top_500 = [(pair[0], pair[1]/anchor_max_score) for pair in anchor_word_count_scores_top_500]
-
-        # Create a dict for quick lookup
-        text_bm25_dict = dict(text_bm25_scores_top_500)
-        title_word_count_dict = dict(title_word_count_scores_top_500)
-        anchor_word_count_dict = dict(anchor_word_count_scores_top_500)
-
-        # combine the 500 most common doc_ids from the three indices scores with the page rank and page views
-        text_weight = in_text_weight
-        title_weight = in_title_weight
-        anchor_weight = in_anchor_weight
-        pr_weight = in_pr_weight
-        pv_weight = in_pv_weight
-        weighted_scores = [
-            (doc_id,
-             text_bm25_dict.get(doc_id, 0.0) * text_weight +
-             title_word_count_dict.get(doc_id, 0.0) * title_weight +
-             anchor_word_count_dict.get(doc_id, 0.0) * anchor_weight +
-             self.page_rank.get(doc_id, 0.0) * pr_weight +
-             self.page_views.get(doc_id, 0.0) * pv_weight / self.views_max)
-            for doc_id in set(text_bm25_dict) | set(title_word_count_dict) | set(anchor_word_count_dict)
-        ]
-
-        # sort the combined scores, transform to a list of top 100 doc_ids
-        sorted_scores = sorted(weighted_scores, key=lambda x: x[1], reverse=True)
-        return [(str(doc_id),"res") for doc_id, score in sorted_scores[:100]]
+        if not tokens:
+            return []
+        
+        scores = cosine_similarity(tokens, index)
+        top_docs = scores.most_common(top_k)
+        doc_ids = [doc_id for doc_id, _ in top_docs]
+        
+        return self._format_results(doc_ids)
