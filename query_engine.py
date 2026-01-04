@@ -474,3 +474,19 @@ class SearchEngine:
         doc_ids = [doc_id for doc_id, _ in top_docs]
         
         return self._format_results(doc_ids)
+    
+    
+    def rerank_with_embeddings(self, query, candidates):
+        """Rerank top K candidates using embedding similarity."""
+        query_vec = self._query_to_embedding(query)
+        doc_ids, embeddings = self.embeddings
+    
+        # Get embeddings for candidate docs
+        scores = []
+        for doc_id in candidates:
+            idx = np.where(doc_ids == doc_id)[0]
+            if len(idx) > 0:
+                similarity = cosine_similarity(query_vec, embeddings[idx[0]])
+                scores.append((doc_id, similarity))
+    
+        return sorted(scores, key=lambda x: x[1], reverse=True)

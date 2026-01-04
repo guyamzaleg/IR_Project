@@ -74,3 +74,10 @@ def load_doc_titles() -> dict:
     
     print(f"✓ Titles: {len(titles)} documents")
     return titles
+
+def load_embeddings(field='title') -> tuple:
+    """Load embeddings and doc_ids."""
+    import numpy as np
+    doc_ids = np.load(f'embeddings/{field}/{field}_doc_ids.npy')
+    embeddings = np.load(f'embeddings/{field}/{field}_embeddings.npy')
+    return doc_ids, embeddings
