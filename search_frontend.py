@@ -21,7 +21,7 @@ inverted_index = None
 pagerank_dict = None
 N_DOCS = 6348910  # Wikipedia size
 
-from search import SearchEngine
+from query_engine import SearchEngine
 search_engine = SearchEngine()
 
 # def load_data():
@@ -156,7 +156,7 @@ def search_anchor():
     return jsonify(res)
 
 @app.route("/get_pagerank", methods=['POST'])
-def get_pagerank():
+def pagerank():
     ''' Returns PageRank values for a list of provided wiki article IDs. 
 
         Test this by issuing a POST request to a URL like:
@@ -181,7 +181,7 @@ def get_pagerank():
     return jsonify(res)
 
 @app.route("/get_pageview", methods=['POST'])
-def get_pageview():
+def pageview():
     ''' Returns the number of page views that each of the provide wiki articles
         had in August 2021.
 

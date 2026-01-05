@@ -17,7 +17,7 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 # Import the real search engine
-from search import SearchEngine
+from query_engine import SearchEngine
 
 # Old imports (commented out - no longer using manual BM25 implementation)
 # from Backend.tokenizer import tokenize
