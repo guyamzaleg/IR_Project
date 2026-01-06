@@ -176,7 +176,7 @@ def pagerank():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    res = search_engine.pagerank(wiki_ids)
+    res = search_engine.get_pagerank(wiki_ids)
     # END SOLUTION
     return jsonify(res)
 
@@ -203,7 +203,7 @@ def pageview():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    res = search_engine.pageview(wiki_ids)
+    res = search_engine.get_pageviews(wiki_ids)
     # END SOLUTION
     return jsonify(res)
 

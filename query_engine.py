@@ -44,10 +44,23 @@ class SearchEngine:
         """Initialize search engine and load all necessary data."""
         print("🔧 Initializing Search Engine...")
         
-        # Load indices
+        # Load required text index
         self.text_index = load_index("text")
-        self.title_index = load_index("title")
-        self.anchor_index = load_index("anchor")
+        
+        # Try to load optional indices
+        try:
+            self.title_index = load_index("title")
+            print("✓ Title index loaded")
+        except (FileNotFoundError, Exception) as e:
+            print(f"⚠ Title index not available: {e}")
+            self.title_index = None
+        
+        try:
+            self.anchor_index = load_index("anchor")
+            print("✓ Anchor index loaded")
+        except (FileNotFoundError, Exception) as e:
+            print(f"⚠ Anchor index not available: {e}")
+            self.anchor_index = None
         
         # Load auxiliary data
         self.pagerank_dict = load_pagerank()
@@ -220,9 +233,15 @@ class SearchEngine:
         return self._search_partial_index(query, self.text_index, top_k)
     
     def search_title(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        if self.title_index is None:
+            print("⚠ Title index not available")
+            return []
         return self._search_partial_index(query, self.title_index, top_k)
     
     def search_anchor(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
+        if self.anchor_index is None:
+            print("⚠ Anchor index not available")
+            return []
         return self._search_partial_index(query, self.anchor_index, top_k)
     
     # ========================================================================
@@ -270,8 +289,16 @@ class SearchEngine:
             {}, DEFAULT_AVGDL, k1=k1, b=b
         ).most_common(500)
         
-        title_scores = word_count_score(tokens, self.title_index).most_common(500)
-        anchor_scores = word_count_score(tokens, self.anchor_index).most_common(500)
+        # Get title and anchor scores only if indices are available
+        if self.title_index is not None:
+            title_scores = word_count_score(tokens, self.title_index).most_common(500)
+        else:
+            title_scores = []
+            
+        if self.anchor_index is not None:
+            anchor_scores = word_count_score(tokens, self.anchor_index).most_common(500)
+        else:
+            anchor_scores = []
         
         # Normalize scores
         text_scores = self._normalize_score_list(text_scores)
