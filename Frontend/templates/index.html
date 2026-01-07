@@ -3,21 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wikipedia Search Engine</title>
+    <title>G&M Search Motors - Exclusive Search Experience</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="bg-pattern"></div>
+    
+    <header class="header">
+        <div class="logo-container">
+            <div class="logo">GM</div>
+            <div class="brand-name">SEARCH MOTORS</div>
+        </div>
+        <div class="tagline">PRECISION • POWER • PERFORMANCE</div>
+    </header>
+    
     <div class="container">
-        <h1>🔍 WikiSearch</h1>
-        <p class="subtitle">Search millions of Wikipedia articles</p>
-        
-        <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Search for anything..." autofocus>
-            <button id="searchBtn">Search</button>
+        <div class="search-section">
+            <div class="search-label">ENTER YOUR QUERY</div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="What knowledge are you seeking?" autofocus>
+                <button id="searchBtn">
+                    <span class="btn-text">ENGAGE</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </div>
         </div>
         
         <div id="results"></div>
     </div>
+    
+    <footer class="footer">
+        <div class="footer-text">G&M SEARCH MOTORS™ | Est. 2025 | Engineered for Excellence</div>
+    </footer>
     
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
