@@ -44,7 +44,7 @@ def load_pagerank():
 def load_pageviews() -> dict:
     """Load PageViews from pickle file."""
     print("Loading PageViews...")
-    path = 'pv/pageview.pkl'
+    path = 'data/pv/pageview.pkl'
     
     try:
         with open(path, 'rb') as f:
@@ -57,14 +57,25 @@ def load_pageviews() -> dict:
 
 
 def load_doc_titles() -> dict:
-    """Load document titles from even/odd pickle files."""
+    """Load document titles from pickle file."""
     print("Loading document titles...")
     
+    # Try new single file format first
+    single_path = 'data/id_title/doc_id_to_title.pkl'
+    if os.path.exists(single_path):
+        try:
+            with open(single_path, 'rb') as f:
+                titles = pickle.load(f)
+            print(f"✓ Titles: {len(titles)} documents")
+            return titles
+        except Exception as e:
+            print(f"⚠️ Error loading {single_path}: {e}")
+    
+    # Fallback to old even/odd format
     even_path = 'id_title/even_id_title_dict.pkl'
     odd_path = 'id_title/uneven_id_title_dict.pkl'
     
     titles = {}
-    
     for path in [even_path, odd_path]:
         try:
             with open(path, 'rb') as f:
