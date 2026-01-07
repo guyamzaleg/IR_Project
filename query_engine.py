@@ -1,19 +1,10 @@
-"""
-Search Engine Query Processing Module
-
-This module provides the main SearchEngine class that orchestrates
-search operations by combining ranking algorithms and data sources.
-
-Single Responsibility: Coordinate search operations and combine signals
-"""
-
 import math
 from collections import defaultdict
 from typing import List, Tuple, Dict, Optional
 
 from Backend.ranking import BM25_score, word_count_score, cosine_similarity
 from Backend.tokenizer import tokenize, og_tokenize
-from Backend.data_Loader import load_index, load_pagerank, load_pageviews, load_doc_titles
+from Backend.data_Loader import load_all_data
 from inverted_index_gcp import InvertedIndex
 
 # Constants
@@ -44,93 +35,23 @@ class SearchEngine:
         """Initialize search engine and load all necessary data."""
         print("🔧 Initializing Search Engine...")
         
-        # Load indices
-        self.text_index = load_index("text")
-        self.title_index = load_index("title")
-        self.anchor_index = load_index("anchor")
+        data = load_all_data()
         
-        # Load auxiliary data
-        self.pagerank_dict = load_pagerank()
-        self.pageviews_dict = load_pageviews()
-        self.doc_titles_dict = load_doc_titles()
+        # Unpack data
+        self.text_index = data['indexes']['text']
+        self.title_index = data['indexes']['title']
+        self.anchor_index = data['indexes']['anchor']
+        self.pagerank_dict = data['pagerank']
+        self.pageviews_dict = data['pageviews']
+        self.doc_titles_dict = data['titles']
+
+        # Embeddings (optional)
+        self.embeddings = data.get('embeddings')
         
-        # Precompute PageRank normalization parameters
+        # Precompute normalization params
         self._precompute_pagerank_params()
-        
-        # Precompute PageViews normalization
         self._precompute_pageviews_params()
-        
-        print("✅ Search Engine Initialized!")
-    
-    def _precompute_pagerank_params(self):
-        """Precompute PageRank normalization parameters for efficiency."""
-        if self.pagerank_dict:
-            pagerank_values = [pr for pr in self.pagerank_dict.values() if pr > 0]
-            if pagerank_values:
-                self.pr_max = max(pagerank_values)
-                self.pr_min = min(pagerank_values)
-                self.pr_range = self.pr_max - self.pr_min if self.pr_max > self.pr_min else 1.0
-            else:
-                self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
-        else:
-            self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
-    
-    def _precompute_pageviews_params(self):
-        """Precompute PageViews normalization parameters."""
-        if self.pageviews_dict:
-            self.pv_max = max(self.pageviews_dict.values())
-        else:
-            self.pv_max = 1.0
-    
-    def _get_normalized_pagerank(self, doc_id: int) -> float:
-        """
-        Get normalized PageRank score for a document.
-        
-        Args:
-            doc_id: Document ID
-        
-        Returns:
-            Normalized PageRank score [0, 1]
-        """
-        if not self.pagerank_dict or doc_id not in self.pagerank_dict:
-            return 0.5  # Neutral default
-        
-        pr_raw = self.pagerank_dict[doc_id]
-        if self.pr_range > 0:
-            return (pr_raw - self.pr_min) / self.pr_range
-        return 0.5
-    
-    def _get_normalized_pageviews(self, doc_id: int) -> float:
-        """
-        Get normalized PageViews score for a document.
-        
-        Args:
-            doc_id: Document ID
-        
-        Returns:
-            Normalized PageViews score [0, 1]
-        """
-        if not self.pageviews_dict or doc_id not in self.pageviews_dict:
-            return 0.0
-        
-        return self.pageviews_dict[doc_id] / self.pv_max if self.pv_max > 0 else 0.0
-    
-    def _format_results(self, doc_ids: List[int]) -> List[Tuple[str, str]]:
-        """
-        Format document IDs with titles.
-        
-        Args:
-            doc_ids: List of document IDs
-        
-        Returns:
-            List of (doc_id_str, title) tuples
-        """
-        results = []
-        for doc_id in doc_ids:
-            title = self.doc_titles_dict.get(doc_id, f"Document {doc_id}")
-            results.append((str(doc_id), title))
-        return results
-    
+        print("Search Engine Ready!")
     # ========================================================================
     # PRIMARY SEARCH METHOD (Main endpoint)
     # ========================================================================
@@ -304,8 +225,52 @@ class SearchEngine:
         return self._format_results(doc_ids)
     
     # ========================================================================
-    # UTILITY METHODS (For individual endpoints)
+    # UTILITY METHODS
     # ========================================================================
+    def _precompute_pagerank_params(self):
+        """Precompute PageRank normalization parameters for efficiency."""
+        if self.pagerank_dict:
+            pagerank_values = [pr for pr in self.pagerank_dict.values() if pr > 0]
+            if pagerank_values:
+                self.pr_max = max(pagerank_values)
+                self.pr_min = min(pagerank_values)
+                self.pr_range = self.pr_max - self.pr_min if self.pr_max > self.pr_min else 1.0
+            else:
+                self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
+        else:
+            self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
+    
+    def _precompute_pageviews_params(self):
+        """Precompute PageViews normalization parameters."""
+        if self.pageviews_dict:
+            self.pv_max = max(self.pageviews_dict.values())
+        else:
+            self.pv_max = 1.0
+    
+    def _get_normalized_pagerank(self, doc_id: int) -> float:
+        """Get normalized PageRank [0, 1]."""
+        if not self.pagerank_dict or doc_id not in self.pagerank_dict:
+            return 0.5  # Neutral default
+        
+        pr_raw = self.pagerank_dict[doc_id]
+        if self.pr_range > 0:
+            return (pr_raw - self.pr_min) / self.pr_range
+        return 0.5
+    
+    def _get_normalized_pageviews(self, doc_id: int) -> float:
+        """Get normalized PageViews [0, 1]."""
+        if not self.pageviews_dict or doc_id not in self.pageviews_dict:
+            return 0.0
+        
+        return self.pageviews_dict[doc_id] / self.pv_max if self.pv_max > 0 else 0.0
+    
+    def _format_results(self, doc_ids: List[int]) -> List[Tuple[str, str]]:
+        """Format results as [(doc_id, title), ...]."""
+        results = []
+        for doc_id in doc_ids:
+            title = self.doc_titles_dict.get(doc_id, f"Document {doc_id}")
+            results.append((str(doc_id), title))
+        return results
     
     def get_pagerank(self, doc_ids: List[int]) -> List[float]:
         """
@@ -375,7 +340,7 @@ class SearchEngine:
             if idf == 0:
                 continue
             
-            posting_list = self.text_index.read_a_posting_list("data/postings_gcp", term)
+            posting_list = self.text_index.read_a_posting_list("data", term)
             
             for doc_id, tf in posting_list:
                 # BM25 formula
