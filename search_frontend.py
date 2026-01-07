@@ -24,21 +24,6 @@ N_DOCS = 6348910  # Wikipedia size
 from query_engine import SearchEngine
 search_engine = SearchEngine()
 
-# def load_data():
-#     """Load data only once, even with Flask's debug reloader."""
-#     global inverted_index, pagerank_dict
-    
-#     if inverted_index is None or pagerank_dict is None:
-#         print("="*50)
-#         print("🚀 Starting search engine...")
-#         print("="*50)
-#         inverted_index = load_index()
-#         pagerank_dict = load_pagerank()
-#         print("✓ All data loaded successfully!")
-#         print("="*50)
-# Load data when module is first imported
-# load_data()
-
 @app.route("/")
 def home():
     return render_template('index.html')
