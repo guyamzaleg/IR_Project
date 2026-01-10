@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict
 
 from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score
 from Backend.tokenizer import tokenize
-from Backend.data_Loader import load_all_data#load_index, load_pagerank, load_pageviews, load_doc_titles
+from Backend.data_Loader import load_all_data
 from inverted_index_gcp import InvertedIndex
 
 N_DOCS = 6348910
@@ -36,7 +36,9 @@ class SearchEngine:
     
     def __init__(self, config: Dict = CONFIG):
         print("🔧 Initializing Search Engine...")
-        
+
+        self.config = config
+
         data = load_all_data()
         
         self.text_index = data['indexes']['text']
@@ -45,7 +47,7 @@ class SearchEngine:
         self.pagerank_dict = data['pagerank']
         self.pageviews_dict = data['pageviews']
         self.doc_titles_dict = data['titles']
-        self.embeddings = data.get('embeddings')
+        # self.embeddings = data.get('embeddings')
         
         self._precompute_normalization()
         
@@ -75,50 +77,6 @@ class SearchEngine:
     # ========================================================================
     # MAIN SEARCH METHODS
     # ========================================================================
-    # def search_basic(self, query: str, top_k: int = 10) -> List[List]:
-    #     """
-    #     Basic hybrid search for testing - BM25 + PageRank.
-        
-    #     Simplified version optimized for quick queries.
-    #     Returns format: [[doc_id, title], ...]
-        
-    #     Args:
-    #         query: Search query string
-    #         top_k: Number of results (default: 10)
-        
-    #     Returns:
-    #         List of [doc_id, title] pairs
-    #     """
-    #     tokens = tokenize(query,  self.config['use_stemming'])
-    #     if not tokens:
-    #         return []
-        
-    #     # Calculate BM25 scores
-    #     doc_scores = self._calculate_bm25_scores(tokens)
-        
-    #     if not doc_scores:
-    #         return []
-        
-    #     # Normalize BM25 scores
-    #     doc_scores = self._normalize_scores(doc_scores)
-
-    #     # Combine with PageRank
-    #     final_scores = {}
-    #     for doc_id, bm25_score in doc_scores.items():
-    #         pr_score = self._get_normalized_pagerank(doc_id)
-    #         final_scores[doc_id] = (0.8 * bm25_score + 
-    #                                0.2 * pr_score)
-        
-    #     # Sort and format
-    #     sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        
-    #     results = []
-    #     for doc_id, _ in sorted_docs:
-    #         title = self.doc_titles_dict.get(doc_id, f"Article {doc_id}")
-    #         results.append([int(doc_id), title])
-        
-    #     return results
-    
     def search(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
         """Main hybrid search combining all signals."""
         tokens = tokenize(query,  self.config['use_stemming'])
@@ -309,6 +267,10 @@ class SearchEngine:
     def get_pageviews(self, doc_ids: List[int]) -> List[int]:
         """Get PageView counts for doc IDs."""
         return [self.pageviews_dict.get(doc_id, 0) for doc_id in doc_ids]
+    
+    def get_doc_titles(self, doc_ids: List[int]) -> List[str]:
+        """Get titles for doc IDs."""
+        return [self.doc_titles_dict.get(doc_id, f"Document {doc_id}") for doc_id in doc_ids] 
     
     def get_doc_titles(self, doc_ids: List[int]) -> List[str]:
         """Get titles for doc IDs."""
