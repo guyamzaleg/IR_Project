@@ -42,17 +42,8 @@ def load_pagerank():
 def load_pageviews():
     """Load PageViews"""
     print("Loading PageViews...")
-    try:
-        with open('data/pv/pageview.pkl', 'rb') as f:
-            pv = pickle.load(f)
-        print(f"✓ PageViews: {len(pv)} documents")
-        return pv
-    except FileNotFoundError:
-        return {}
-
-def load_doc_titles():
-    """Load document titles"""
-    print("Loading titles...")
+    path = 'pv/pageview.pkl'
+    
     try:
         with open('data/mappings/doc_id_to_title.pkl', 'rb') as f:
             titles = pickle.load(f)
@@ -61,30 +52,29 @@ def load_doc_titles():
     except FileNotFoundError:
         return {}
 
-def load_embeddings(field='title'):
-    """Load embeddings"""
-    print(f"Loading {field} embeddings...")
-    try:
-        doc_ids = np.load(f'data/embeddings/{field}/{field}_doc_ids.npy')
-        embeddings = np.load(f'data/embeddings/{field}/{field}_embeddings.npy')
-        print(f"✓ Embeddings: {len(doc_ids)} documents")
-        return doc_ids, embeddings
-    except FileNotFoundError:
-        return None, None
 
-def load_all_data():
-    """Load everything"""
-    print("=" * 60)
-    data = {
-        'indexes': load_all_indexes(),
-        'pagerank': load_pagerank(),
-        'pageviews': load_pageviews(),
-        'titles': load_doc_titles()
-    }
+def load_doc_titles() -> dict:
+    """Load document titles from even/odd pickle files."""
+    print("Loading document titles...")
     
-    doc_ids, embeddings = load_embeddings('title')
-    if doc_ids is not None:
-        data['embeddings'] = {'doc_ids': doc_ids, 'vectors': embeddings}
+    even_path = 'id_title/even_id_title_dict.pkl'
+    odd_path = 'id_title/uneven_id_title_dict.pkl'
     
-    print("=" * 60)
-    return data
+    titles = {}
+    
+    for path in [even_path, odd_path]:
+        try:
+            with open(path, 'rb') as f:
+                titles.update(pickle.load(f))
+        except FileNotFoundError:
+            print(f"⚠️ Not found: {path}")
+    
+    print(f"✓ Titles: {len(titles)} documents")
+    return titles
+
+def load_embeddings(field='title') -> tuple:
+    """Load embeddings and doc_ids."""
+    import numpy as np
+    doc_ids = np.load(f'embeddings/{field}/{field}_doc_ids.npy')
+    embeddings = np.load(f'embeddings/{field}/{field}_embeddings.npy')
+    return doc_ids, embeddings

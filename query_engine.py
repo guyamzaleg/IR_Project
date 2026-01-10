@@ -36,18 +36,6 @@ class SearchEngine:
     
     def __init__(self, config: Dict = CONFIG):
         print("🔧 Initializing Search Engine...")
-
-        self.config = config
-        
-        # # Load indices
-        # self.text_index = load_index("text")
-        # self.title_index = load_index("title")
-        # self.anchor_index = load_index("anchor")
-        
-        # # Load auxiliary data
-        # self.pagerank_dict = load_pagerank()
-        # self.pageviews_dict = load_pageviews()
-        # self.doc_titles_dict = load_doc_titles()
         
         data = load_all_data()
         
