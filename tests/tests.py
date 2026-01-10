@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple, Set
 sys.path.append(str(Path(__file__).parent.parent))
 
 # Import search engine
-from query_engine import SearchEngine
+from query_engine import SearchEngine, CONFIG
 
 
 class SearchEngineEvaluator:
@@ -57,7 +57,7 @@ class SearchEngineEvaluator:
         """Initialize the search engine instance."""
         if self.search_engine is None:
             print("Initializing search engine...")
-            self.search_engine = SearchEngine()
+            self.search_engine = SearchEngine(CONFIG)
             print("✓ Search engine initialized successfully!")
     
     def query_search(self, query_text: str, top_k: int = 100) -> List[str]:

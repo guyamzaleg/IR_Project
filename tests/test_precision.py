@@ -17,7 +17,7 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 # Import the real search engine
-from query_engine import SearchEngine
+from query_engine import SearchEngine, CONFIG
 
 # Old imports (commented out - no longer using manual BM25 implementation)
 # from Backend.tokenizer import tokenize
@@ -47,7 +47,7 @@ def initialize_search_engine():
     # NEW: Initialize real SearchEngine instance
     if search_engine is None:
         print("Initializing search engine...")
-        search_engine = SearchEngine()
+        search_engine = SearchEngine(CONFIG)
         print("✓ Search engine initialized successfully!")
     
     # OLD implementation (commented out):
@@ -99,7 +99,7 @@ def query_search_engine(query_text, top_k=10):
     
     # NEW: Call the real search_basic method from SearchEngine
     # search_basic returns a list of [doc_id, title] pairs
-    results = search_engine.search_basic(query_text)
+    results = search_engine.search(query_text)
     
     # Extract just the doc_ids and convert to strings, limit to top_k
     doc_ids = [str(doc_id) for doc_id, _ in results[:top_k]]

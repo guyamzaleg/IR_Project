@@ -6,6 +6,8 @@ import nltk
 from nltk import PorterStemmer
 from nltk.corpus import stopwords
 import re
+import string
+from typing import List, Dict
 from inverted_index_gcp import *
 
 def query_tfidf(query, index):
@@ -91,40 +93,48 @@ def cosine_similarity(tokenized_query, index):
 
     return results
 
-def BM25_score(tokenized_query, index, doc_num, doc_lengths, avg_doc_length, k1=1.2, b=0.75):
+def BM25_score(tokenized_query, index, doc_num, doc_lengths, avg_doc_length, k1=1.2, k3=1.5, b=0.75):
     """
     Calculates BM25 scores for documents based on a given query and an inverted index.
-
-    Args:
-        tokenized_query (list): A list of tokens representing the query.
-        index: The inverted index object.
-        doc_num (int): Total number of documents.
-        doc_lengths (dict): A dictionary mapping document IDs to their lengths.
-        avg_doc_length (float): The average document length.
-        k1 (float, optional): BM25 tuning parameter. Defaults to 1.2.
-        b (float, optional): BM25 tuning parameter. Defaults to 0.75.
-
-    Returns:
-        dict: A dictionary where keys are document IDs and values are their BM25 scores.
     """
-    bm25_scores = Counter()  # Initialize a dictionary to store BM25 scores
-    candidates_dict = {}  # Initialize a dictionary to store candidates of retrieval
+    bm25_scores = Counter()
+    candidates_dict = {}
+    
+    # Count query term frequencies
+    query_term_freq = Counter(tokenized_query)
 
     for token in tokenized_query:
         pl = index.read_a_posting_list("data", token)
         if pl == []:
             continue
-        else:
-            candidates_dict[token] = pl  # Store the posting list in the dictionary
-            df = index.df[token]  # Document frequency
-            idf = math.log(doc_num / df, 10)  # Inverse document frequency
-
-            for doc_id, tf in candidates_dict[token]:  # Iterate through the posting list
-                try:
-                    norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (doc_lengths[doc_id] / avg_doc_length)))
-                    bm25_scores[doc_id] += idf * norm  # Accumulate scores
-                except:
-                    pass
+        
+        candidates_dict[token] = pl
+        df = index.df[token]
+        
+        idf = np.log((doc_num - df + 0.5) / (df + 0.5) + 1.0)  # Modern IDF formula
+        # idf = np.log((doc_num + 1) / df)  # Original IDF formula
+        
+        # Query term weight
+        tf_iq = query_term_freq[token]
+        query_weight = ((k3 + 1) * tf_iq) / (k3 + tf_iq)
+        
+        for doc_id, tf in candidates_dict[token]:
+            try:
+                # Document length normalization
+                if doc_lengths:
+                    doc_len = doc_lengths.get(doc_id, avg_doc_length)
+                else:
+                    doc_len = avg_doc_length
+                
+                B = 1 - b + b * (doc_len / avg_doc_length)
+                
+                # Document term weight (p1)
+                doc_weight = ((k1 + 1) * tf) / (B * k1 + tf)
+                
+                # Combine all components
+                bm25_scores[doc_id] += idf * doc_weight * query_weight
+            except:
+                pass
 
     return bm25_scores
 
@@ -181,4 +191,48 @@ def tf_count_score(tokenized_query, index):
     return doc_tf_scores
 
 
+def pagerank_score(doc_ids: List[int], pagerank_dict: Dict[int, float]) -> Counter:
+    """
+    Rank documents purely by PageRank score (query-independent).
+    
+    Args:
+        doc_ids: List of document IDs to rank (or empty list for all docs)
+        pagerank_dict: Dictionary mapping doc_id to PageRank score
+    
+    Returns:
+        Counter with doc_id as key and PageRank score as value
+    """
+    scores = Counter()
+    
+    # If no specific docs provided, use all available
+    if not doc_ids:
+        doc_ids = list(pagerank_dict.keys())
+    
+    for doc_id in doc_ids:
+        scores[doc_id] = pagerank_dict.get(doc_id, 0.0)
+    
+    return scores
+
+
+def pageviews_score(doc_ids: List[int], pageviews_dict: Dict[int, int]) -> Counter:
+    """
+    Rank documents purely by PageViews count (query-independent).
+    
+    Args:
+        doc_ids: List of document IDs to rank (or empty list for all docs)
+        pageviews_dict: Dictionary mapping doc_id to pageview count
+    
+    Returns:
+        Counter with doc_id as key and pageview count as value
+    """
+    scores = Counter()
+    
+    # If no specific docs provided, use all available
+    if not doc_ids:
+        doc_ids = list(pageviews_dict.keys())
+    
+    for doc_id in doc_ids:
+        scores[doc_id] = pageviews_dict.get(doc_id, 0)
+    
+    return scores
 

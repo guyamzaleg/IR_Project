@@ -12,7 +12,10 @@ corpus_stopwords = ["category", "references", "also", "external", "links",
 all_stopwords = english_stopwords.union(corpus_stopwords)
 RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
-def tokenize(text):
+def tokenize(text, stem=False):
+    return tokenize_stemmed(text) if stem else tokenize_not_stemmed(text)
+
+def tokenize_not_stemmed(text):
     """
     Tokenize text and remove stopwords.
     Matches the tokenization from GCP notebook exactly.

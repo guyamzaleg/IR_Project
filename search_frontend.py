@@ -21,8 +21,8 @@ inverted_index = None
 pagerank_dict = None
 N_DOCS = 6348910  # Wikipedia size
 
-from query_engine import SearchEngine
-search_engine = SearchEngine()
+from query_engine import SearchEngine, CONFIG
+search_engine = SearchEngine(CONFIG)
 
 @app.route("/")
 def home():
@@ -51,7 +51,7 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    res = search_engine.search(query)
+    res = search_engine.search_basic(query)
     # END SOLUTION
     return jsonify(res)
 

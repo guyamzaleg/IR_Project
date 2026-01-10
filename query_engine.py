@@ -1,22 +1,43 @@
 import math
-from collections import defaultdict
+from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
 
-from Backend.ranking import BM25_score, word_count_score, cosine_similarity
+from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score
 from Backend.tokenizer import tokenize
 from Backend.data_Loader import load_all_data
 from inverted_index_gcp import InvertedIndex
 
 N_DOCS = 6348910
 DEFAULT_AVGDL = 500
-DEFAULT_K1 = 1.5
-DEFAULT_B = 0.75
+
+CONFIG = {
+    'n_docs': N_DOCS,
+    'default_avgdl': DEFAULT_AVGDL,
+    'bm25_text': {'k1': 1.2, 'b': 0.9, 'k3': 2.0},
+    'bm25_title': {'k1': 1.2, 'b': 0.9, 'k3': 2.0},
+    'weights': {
+        'text': 0.6,
+        'title': 0.2,
+        'anchor': 0.05,
+        'pagerank': 0.05,
+        'pageviews': 0.1
+    },
+    'ranking_methods': {
+        'text': 'BM25',        # Options: 'BM25', 'cosine', 'word_count', 'tf_count'
+        'title': 'BM25',       # Options: 'BM25', 'cosine', 'word_count', 'tf_count'
+        'anchor': 'word_count' # Options: 'BM25', 'cosine', 'word_count', 'tf_count'
+    },
+    'top_n_candidates': 500,
+    'use_stemming': False
+}
 
 class SearchEngine:
     """Main search engine with hybrid ranking."""
     
-    def __init__(self):
+    def __init__(self, config: Dict = CONFIG):
         print("🔧 Initializing Search Engine...")
+
+        self.config = config
         
         data = load_all_data()
         
@@ -45,26 +66,80 @@ class SearchEngine:
         
         # PageViews normalization
         self.pv_max = max(self.pageviews_dict.values()) if self.pageviews_dict else 1.0
+
+        # Precompute document lengths and averages
+        self.text_doc_lengths = self.text_index.DL if hasattr(self.text_index, 'DL') else {}
+        self.text_avg_dl = sum(self.text_doc_lengths.values()) / len(self.text_doc_lengths) if self.text_doc_lengths else DEFAULT_AVGDL
+    
+        self.title_doc_lengths = self.title_index.DL if hasattr(self.title_index, 'DL') else {}
+        self.title_avg_dl = sum(self.title_doc_lengths.values()) / len(self.title_doc_lengths) if self.title_doc_lengths else DEFAULT_AVGDL
     
     # ========================================================================
     # MAIN SEARCH METHODS
     # ========================================================================
+    def search_basic(self, query: str, top_k: int = 10) -> List[List]:
+        """
+        Basic hybrid search for testing - BM25 + PageRank.
+        
+        Simplified version optimized for quick queries.
+        Returns format: [[doc_id, title], ...]
+        
+        Args:
+            query: Search query string
+            top_k: Number of results (default: 10)
+        
+        Returns:
+            List of [doc_id, title] pairs
+        """
+        tokens = tokenize(query,  self.config['use_stemming'])
+        if not tokens:
+            return []
+        
+        # Calculate BM25 scores
+        doc_scores = self._calculate_bm25_scores(tokens)
+        
+        if not doc_scores:
+            return []
+        
+        # Normalize BM25 scores
+        doc_scores = self._normalize_scores(doc_scores)
+
+        # Combine with PageRank
+        final_scores = {}
+        for doc_id, bm25_score in doc_scores.items():
+            pr_score = self._get_normalized_pagerank(doc_id)
+            final_scores[doc_id] = (0.8 * bm25_score + 
+                                   0.2 * pr_score)
+        
+        # Sort and format
+        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        
+        results = []
+        for doc_id, _ in sorted_docs:
+            title = self.doc_titles_dict.get(doc_id, f"Article {doc_id}")
+            results.append([int(doc_id), title])
+        
+        return results
     
     def search(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
         """Main hybrid search combining all signals."""
-        tokens = tokenize(query)
+        tokens = tokenize(query,  self.config['use_stemming'])
         if not tokens:
             return []
         
         # Get scores from all indices
-        text_scores = self._get_text_scores(tokens, top_n=500)
-        title_scores = self._get_title_scores(tokens, top_n=500)
-        anchor_scores = self._get_anchor_scores(tokens, top_n=500)
+        text_scores = self._get_text_scores(tokens, self.config['top_n_candidates'])
+        title_scores = self._get_title_scores(tokens, top_n=self.config['top_n_candidates'])
+        anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['top_n_candidates'])
         
         # Combine with weights
         combined = self._combine_signals(
             text_scores, title_scores, anchor_scores,
-            text_w=1.5, title_w=1.2, anchor_w=0.8, pr_w=0.4, pv_w=0.6
+            text_w=self.config['weights']['text'],
+            title_w=self.config['weights']['title'],
+            anchor_w=self.config['weights']['anchor'],
+            pr_w=self.config['weights']['pagerank'],
+            pv_w=self.config['weights']['pageviews']
         )
         
         # Sort and return
@@ -88,18 +163,73 @@ class SearchEngine:
     # ========================================================================
     
     def _get_text_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]:
-        """Get BM25 scores from text index."""
-        scores = BM25_score(tokens, self.text_index, N_DOCS, {}, DEFAULT_AVGDL, k1=1.2, b=0.6)
+        """Get scores from text index using configured ranking method."""
+        method = self.config['ranking_methods']['text']
+        
+        if method == 'BM25':
+            scores = BM25_score(
+                tokens, self.text_index, N_DOCS, 
+                self.text_doc_lengths, self.text_avg_dl, 
+                k1=self.config['bm25_text']['k1'], 
+                k3=self.config['bm25_text']['k3'], 
+                b=self.config['bm25_text']['b']
+            )
+        elif method == 'cosine':
+            scores = cosine_similarity(tokens, self.text_index)
+        elif method == 'word_count':
+            scores = word_count_score(tokens, self.text_index)
+        elif method == 'tf_count':
+            scores = tf_count_score(tokens, self.text_index)
+        else:
+            raise ValueError(f"Unknown ranking method: {method}")
+        
         return dict(self._normalize_list(scores.most_common(top_n)))
     
     def _get_title_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]:
-        """Get BM25 scores from title index."""
-        scores = BM25_score(tokens, self.title_index, N_DOCS, {}, DEFAULT_AVGDL, k1=1.5, b=0.4)
+        """Get scores from title index using configured ranking method."""
+        method = self.config['ranking_methods']['title']
+        
+        if method == 'BM25':
+            scores = BM25_score(
+                tokens, self.title_index, N_DOCS, 
+                self.title_doc_lengths, self.title_avg_dl, 
+                k1=self.config['bm25_title']['k1'], 
+                k3=self.config['bm25_title']['k3'], 
+                b=self.config['bm25_title']['b']
+            )
+        elif method == 'cosine':
+            scores = cosine_similarity(tokens, self.title_index)
+        elif method == 'word_count':
+            scores = word_count_score(tokens, self.title_index)
+        elif method == 'tf_count':
+            scores = tf_count_score(tokens, self.title_index)
+        else:
+            raise ValueError(f"Unknown ranking method: {method}")
+
         return dict(self._normalize_list(scores.most_common(top_n)))
     
-    def _get_anchor_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]:
-        """Get word count scores from anchor index."""
-        scores = word_count_score(tokens, self.anchor_index)
+    def _get_anchor_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]: 
+        """Get scores from anchor index using configured ranking method."""
+        method = self.config['ranking_methods']['anchor']
+        
+        if method == 'BM25':
+            # Anchor index doesn't have DL, use default
+            scores = BM25_score(
+                tokens, self.anchor_index, N_DOCS, 
+                {}, DEFAULT_AVGDL, 
+                k1=self.config['bm25_text']['k1'], 
+                k3=self.config['bm25_text']['k3'], 
+                b=self.config['bm25_text']['b']
+            )
+        elif method == 'cosine':
+            scores = cosine_similarity(tokens, self.anchor_index)
+        elif method == 'word_count':
+            scores = word_count_score(tokens, self.anchor_index)
+        elif method == 'tf_count':
+            scores = tf_count_score(tokens, self.anchor_index)
+        else:
+            raise ValueError(f"Unknown ranking method: {method}")
+            
         return dict(self._normalize_list(scores.most_common(top_n)))
     
     def _combine_signals(
@@ -127,7 +257,7 @@ class SearchEngine:
     
     def _search_single_index(self, query: str, index: InvertedIndex, top_k: int) -> List[Tuple[str, str]]:
         """Search single index using cosine similarity."""
-        tokens = tokenize(query)
+        tokens = tokenize(query, False)
         if not tokens:
             return []
         
