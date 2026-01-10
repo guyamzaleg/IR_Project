@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict
 
 from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score
 from Backend.tokenizer import tokenize
-from Backend.data_Loader import load_all_data
+from Backend.data_Loader import load_all_data#load_index, load_pagerank, load_pageviews, load_doc_titles
 from inverted_index_gcp import InvertedIndex
 
 N_DOCS = 6348910
@@ -38,6 +38,16 @@ class SearchEngine:
         print("🔧 Initializing Search Engine...")
 
         self.config = config
+        
+        # # Load indices
+        # self.text_index = load_index("text")
+        # self.title_index = load_index("title")
+        # self.anchor_index = load_index("anchor")
+        
+        # # Load auxiliary data
+        # self.pagerank_dict = load_pagerank()
+        # self.pageviews_dict = load_pageviews()
+        # self.doc_titles_dict = load_doc_titles()
         
         data = load_all_data()
         
@@ -77,49 +87,49 @@ class SearchEngine:
     # ========================================================================
     # MAIN SEARCH METHODS
     # ========================================================================
-    def search_basic(self, query: str, top_k: int = 10) -> List[List]:
-        """
-        Basic hybrid search for testing - BM25 + PageRank.
+    # def search_basic(self, query: str, top_k: int = 10) -> List[List]:
+    #     """
+    #     Basic hybrid search for testing - BM25 + PageRank.
         
-        Simplified version optimized for quick queries.
-        Returns format: [[doc_id, title], ...]
+    #     Simplified version optimized for quick queries.
+    #     Returns format: [[doc_id, title], ...]
         
-        Args:
-            query: Search query string
-            top_k: Number of results (default: 10)
+    #     Args:
+    #         query: Search query string
+    #         top_k: Number of results (default: 10)
         
-        Returns:
-            List of [doc_id, title] pairs
-        """
-        tokens = tokenize(query,  self.config['use_stemming'])
-        if not tokens:
-            return []
+    #     Returns:
+    #         List of [doc_id, title] pairs
+    #     """
+    #     tokens = tokenize(query,  self.config['use_stemming'])
+    #     if not tokens:
+    #         return []
         
-        # Calculate BM25 scores
-        doc_scores = self._calculate_bm25_scores(tokens)
+    #     # Calculate BM25 scores
+    #     doc_scores = self._calculate_bm25_scores(tokens)
         
-        if not doc_scores:
-            return []
+    #     if not doc_scores:
+    #         return []
         
-        # Normalize BM25 scores
-        doc_scores = self._normalize_scores(doc_scores)
+    #     # Normalize BM25 scores
+    #     doc_scores = self._normalize_scores(doc_scores)
 
-        # Combine with PageRank
-        final_scores = {}
-        for doc_id, bm25_score in doc_scores.items():
-            pr_score = self._get_normalized_pagerank(doc_id)
-            final_scores[doc_id] = (0.8 * bm25_score + 
-                                   0.2 * pr_score)
+    #     # Combine with PageRank
+    #     final_scores = {}
+    #     for doc_id, bm25_score in doc_scores.items():
+    #         pr_score = self._get_normalized_pagerank(doc_id)
+    #         final_scores[doc_id] = (0.8 * bm25_score + 
+    #                                0.2 * pr_score)
         
-        # Sort and format
-        sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+    #     # Sort and format
+    #     sorted_docs = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
         
-        results = []
-        for doc_id, _ in sorted_docs:
-            title = self.doc_titles_dict.get(doc_id, f"Article {doc_id}")
-            results.append([int(doc_id), title])
+    #     results = []
+    #     for doc_id, _ in sorted_docs:
+    #         title = self.doc_titles_dict.get(doc_id, f"Article {doc_id}")
+    #         results.append([int(doc_id), title])
         
-        return results
+    #     return results
     
     def search(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
         """Main hybrid search combining all signals."""
@@ -151,12 +161,12 @@ class SearchEngine:
         return self._search_single_index(query, self.text_index, top_k)
     
     def search_title(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
-        """Search title index only with cosine similarity."""
         return self._search_single_index(query, self.title_index, top_k)
+        # return self._search_partial_index(query, self.title_index, top_k)
     
     def search_anchor(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
-        """Search anchor index only with cosine similarity."""
         return self._search_single_index(query, self.anchor_index, top_k)
+        # return self._search_partial_index(query, self.anchor_index, top_k)
     
     # ========================================================================
     # HELPER METHODS - SCORING

@@ -23,12 +23,40 @@
     <div class="container">
         <div class="search-section">
             <div class="search-label">ENTER YOUR QUERY</div>
+            <div class="search-mode-selector">
+                <label class="mode-option">
+                    <input type="radio" name="searchMode" value="search" checked>
+                    <span>HYBRID SEARCH</span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="searchMode" value="search_body">
+                    <span>BODY ONLY</span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="searchMode" value="search_title">
+                    <span>TITLE ONLY</span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="searchMode" value="search_anchor">
+                    <span>ANCHOR TEXT</span>
+                </label>
+            </div>
             <div class="search-box">
                 <input type="text" id="searchInput" placeholder="What knowledge are you seeking?" autofocus>
                 <button id="searchBtn">
                     <span class="btn-text">ENGAGE</span>
                     <span class="btn-icon">→</span>
                 </button>
+            </div>
+            <div class="search-options">
+                <label class="option-toggle">
+                    <input type="checkbox" id="showPageRank" checked>
+                    <span>Show PageRank</span>
+                </label>
+                <label class="option-toggle">
+                    <input type="checkbox" id="showPageViews" checked>
+                    <span>Show PageViews</span>
+                </label>
             </div>
         </div>
         

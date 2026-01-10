@@ -51,7 +51,7 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    res = search_engine.search_basic(query)
+    res = search_engine.search(query)
     # END SOLUTION
     return jsonify(res)
 
@@ -146,7 +146,8 @@ def pagerank():
 
         Test this by issuing a POST request to a URL like:
           http://YOUR_SERVER_DOMAIN/get_pagerank
-        with a json payload of the list of article ids. In python do:
+        with a json payload
+         of the list of article ids. In python do:
           import requests
           requests.post('http://YOUR_SERVER_DOMAIN/get_pagerank', json=[1,5,8])
         As before YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
