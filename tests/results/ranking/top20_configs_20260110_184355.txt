@@ -1,0 +1,63 @@
+TOP 20 CONFIGURATIONS
+====================================================================================================
+
+#1: rank_t-BM25_ti-BM25_a-BM25
+     HM(P@5,F1@30)=0.5185 | P@10=0.7033 | Time=0.723s
+
+#2: rank_t-BM25_ti-BM25_a-cosine
+     HM(P@5,F1@30)=0.5185 | P@10=0.7033 | Time=0.898s
+
+#3: rank_t-BM25_ti-BM25_a-word_count
+     HM(P@5,F1@30)=0.5185 | P@10=0.7033 | Time=0.580s
+
+#4: rank_t-BM25_ti-BM25_a-tf_count
+     HM(P@5,F1@30)=0.5185 | P@10=0.7033 | Time=0.552s
+
+#5: rank_t-BM25_ti-tf_count_a-BM25
+     HM(P@5,F1@30)=0.5134 | P@10=0.7000 | Time=0.603s
+
+#6: rank_t-BM25_ti-tf_count_a-cosine
+     HM(P@5,F1@30)=0.5134 | P@10=0.7000 | Time=0.853s
+
+#7: rank_t-BM25_ti-tf_count_a-word_count
+     HM(P@5,F1@30)=0.5134 | P@10=0.7000 | Time=0.546s
+
+#8: rank_t-BM25_ti-tf_count_a-tf_count
+     HM(P@5,F1@30)=0.5134 | P@10=0.7000 | Time=0.544s
+
+#9: rank_t-BM25_ti-cosine_a-tf_count
+     HM(P@5,F1@30)=0.5199 | P@10=0.7000 | Time=0.554s
+
+#10: rank_t-BM25_ti-cosine_a-word_count
+     HM(P@5,F1@30)=0.5199 | P@10=0.7000 | Time=0.555s
+
+#11: rank_t-BM25_ti-cosine_a-cosine
+     HM(P@5,F1@30)=0.5199 | P@10=0.7000 | Time=0.849s
+
+#12: rank_t-BM25_ti-cosine_a-BM25
+     HM(P@5,F1@30)=0.5199 | P@10=0.7000 | Time=0.620s
+
+#13: rank_t-BM25_ti-word_count_a-tf_count
+     HM(P@5,F1@30)=0.5141 | P@10=0.6967 | Time=0.544s
+
+#14: rank_t-BM25_ti-word_count_a-word_count
+     HM(P@5,F1@30)=0.5141 | P@10=0.6967 | Time=0.546s
+
+#15: rank_t-BM25_ti-word_count_a-cosine
+     HM(P@5,F1@30)=0.5141 | P@10=0.6967 | Time=0.841s
+
+#16: rank_t-BM25_ti-word_count_a-BM25
+     HM(P@5,F1@30)=0.5141 | P@10=0.6967 | Time=0.607s
+
+#17: rank_t-cosine_ti-BM25_a-BM25
+     HM(P@5,F1@30)=0.3531 | P@10=0.5967 | Time=1.003s
+
+#18: rank_t-cosine_ti-BM25_a-cosine
+     HM(P@5,F1@30)=0.3546 | P@10=0.5967 | Time=1.237s
+
+#19: rank_t-cosine_ti-BM25_a-word_count
+     HM(P@5,F1@30)=0.3537 | P@10=0.5967 | Time=0.939s
+
+#20: rank_t-cosine_ti-BM25_a-tf_count
+     HM(P@5,F1@30)=0.3537 | P@10=0.5967 | Time=0.938s
+

@@ -184,6 +184,36 @@ class GridSearch:
         print(f"✓ Stemming configurations tested\n")
     
     # ========================================================================
+    # Ranking Methods
+    # ========================================================================
+    
+    def _ranking_methods(self, queries: List[str]):
+        """Test different ranking method combinations."""
+        print("\n🎯 Testing Ranking Method Combinations\n")
+        
+        methods = GRID_CONFIG['ranking_methods']
+        
+        # Test all combinations of ranking methods for text, title, and anchor
+        all_combos = list(itertools.product(methods, methods, methods))
+        
+        print(f"  Testing {len(all_combos)} method combinations...\n")
+        
+        tested = 0
+        for text_method, title_method, anchor_method in all_combos:
+            self.engine.config['ranking_methods']['text'] = text_method
+            self.engine.config['ranking_methods']['title'] = title_method
+            self.engine.config['ranking_methods']['anchor'] = anchor_method
+            
+            config_name = f"rank_t-{text_method}_ti-{title_method}_a-{anchor_method}"
+            self._test_config(config_name, queries)
+            tested += 1
+            
+            if tested % 20 == 0:
+                print(f"  Tested {tested}/{len(all_combos)} configs...")
+        
+        print(f"\n✓ Ranking method testing complete: {tested} configurations tested\n")
+    
+    # ========================================================================
     # CORE TESTING LOGIC
     # ========================================================================
     
@@ -251,6 +281,9 @@ def run_test(test):
     if test == 'stemming':
         optimizer._stemming(queries)
     
+    if test == 'ranking':
+        optimizer._ranking_methods(queries)
+    
     # Convert to DataFrame and save
     df = pd.DataFrame(optimizer.results)
     df = df.sort_values('avg_P@10', ascending=False)
@@ -275,4 +308,4 @@ def run_test(test):
 
 
 if __name__ == "__main__":
-    results_df = run_test("weights")
+    results_df = run_test("ranking")

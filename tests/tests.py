@@ -62,7 +62,7 @@ class SearchEngineEvaluator:
     
     def query_search(self, query_text: str, top_k: int = 100) -> List[str]:
         # Use search_basic method which returns [(doc_id, title), ...]
-        results = self.search_engine.search_basic(query_text)
+        results = self.search_engine.search(query_text)
         
         # Extract doc_ids and convert to strings
         doc_ids = [str(doc_id) for doc_id, _ in results[:top_k]]
