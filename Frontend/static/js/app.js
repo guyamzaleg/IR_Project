@@ -78,7 +78,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function fetchMetrics(results) {
         if (!results || results.length === 0) return;
         
-        const docIds = results.map(r => Array.isArray(r) ? r[0] : r);
+        // Extract doc IDs and convert to integers
+        const docIds = results.map(r => {
+            const id = Array.isArray(r) ? r[0] : r;
+            return parseInt(id, 10);
+        });
         
         // Fetch PageRank if enabled
         if (showPageRankCheckbox.checked) {
@@ -165,9 +169,8 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="result-item" data-doc-id="${id}" onclick="openWikipediaArticle(${id})">
                 <div class="result-number">#${index.toString().padStart(2, '0')}</div>
                 <div class="result-title">${escapedTitle}</div>
-                <div class="result-id">DOCUMENT ID: ${id}</div>
                 <div class="result-metrics"></div>
-                <div class="result-link">en.wikipedia.org</div>
+                <div class="result-link">en.wikipedia.org/?curid=${id}</div>
             </div>
         `;
     }
