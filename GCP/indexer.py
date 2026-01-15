@@ -299,128 +299,87 @@ def create_title_mappings(doc_title_pairs, bucket_name=None):
     
     return title_dict
 
-# Global helper for embedding computation (used by mapPartitions)
-# This loads model once per worker process, not per task
+# No pyspark imports in this file by request.
+# You will need in the NOTEBOOK:
+# from pyspark.sql import SparkSession
+
+import re
+
+# Process-level cache (per Python worker process)
 _embedding_model_cache = {}
 
-def _compute_embeddings_for_partition(rows_iter, model_name, re_pattern, re_flags, stopwords_set):
+def _compute_embeddings_for_partition(rows_iter, model_name, re_pattern, re_flags, stopwords_frozenset):
     """
-    Helper function to compute embeddings for one partition.
-    Loads model once per Python worker process for efficiency.
-    Auto-installs gensim on worker if not present.
+    Runs on executors. Loads the gensim model once per Python worker process.
     """
-    # Use process-level cache to load model only once per worker
-    cache_key = f"model_{model_name}"
-    
+    cache_key = ("kv", model_name)
+
     if cache_key not in _embedding_model_cache:
-        # Auto-install gensim on worker if needed
-        try:
-            import gensim.downloader as api_local
-        except ImportError:
-            print(f"[Worker] Installing gensim...")
-            import subprocess
-            import sys
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", "-q", "gensim", 
-                "--root-user-action=ignore"
-            ])
-            import gensim.downloader as api_local
-            print(f"[Worker] ✅ gensim installed")
-        
-        print(f"[Worker] Loading {model_name}...")
+        import gensim.downloader as api
         _embedding_model_cache[cache_key] = api.load(model_name)
-        _embedding_model_cache['re_word'] = re.compile(re_pattern, re_flags)
-        _embedding_model_cache['stopwords'] = stopwords_set
-        print(f"[Worker] ✅ Model loaded")
-    
-    kv_model = _embedding_model_cache[cache_key]
-    re_word = _embedding_model_cache['re_word']
-    stop = _embedding_model_cache['stopwords']
-    
-    # Process each document in this partition
+        _embedding_model_cache[("re", re_pattern, re_flags)] = re.compile(re_pattern, re_flags)
+
+    kv = _embedding_model_cache[cache_key]
+    token_re = _embedding_model_cache[("re", re_pattern, re_flags)]
+    stop = stopwords_frozenset  # captured in closure, not cached (small anyway)
+
     for title, doc_id in rows_iter:
-        # Tokenize and filter
-        tokens = [m.group() for m in re_word.finditer(title.lower())]
-        tokens = [t for t in tokens if t not in stop and t in kv_model]
-        
+        if title is None:
+            continue
+        # tokenize + filter
+        tokens = [m.group() for m in token_re.finditer(title.lower())]
+        tokens = [t for t in tokens if t not in stop and t in kv]
         if not tokens:
             continue
-        
-        # Use get_mean_vector: faster than building list + np.mean
-        vec = kv_model.get_mean_vector(tokens, pre_normalize=False).astype('float32')
-        
-        # Yield (doc_id, embedding_as_list)
+
+        # mean vector (fast in gensim); list-of-floats is easy for Spark to serialize
+        vec = kv.get_mean_vector(tokens, pre_normalize=False).astype("float32")
         yield (int(doc_id), vec.tolist())
-    
-def create_embeddings(doc_title_pairs, bucket_name, RE_WORD, all_stopwords, 
-                      model_name='glove-wiki-gigaword-100', output_prefix='title'):
+
+
+def create_embeddings(
+    doc_title_pairs,
+    bucket_name,
+    RE_WORD,
+    all_stopwords,
+    model_name="glove-wiki-gigaword-100",
+    output_prefix="title",
+    coalesce_files=256,
+    spark=None,
+):
     """
-    Create document embeddings using word2vec in a distributed, memory-efficient way.
-    
-    This function:
-    - Loads the model once per partition (NOT broadcast) to avoid OOM
-    - Writes distributed Parquet output to GCS (NO collect to driver)
-    - Uses get_mean_vector for efficiency
-    
-    Args:
-        doc_title_pairs: RDD of (title, doc_id) pairs
-        bucket_name: GCS bucket name
-        RE_WORD: regex pattern for tokenization
-        all_stopwords: set of stopwords to filter
-        model_name: gensim model name (default: glove-wiki-gigaword-100)
-        output_prefix: output folder prefix (default: 'title')
-        
-    Returns:
-        str: GCS path where embeddings were saved
-        
-    Prerequisites:
-        - gensim must be installed on ALL cluster workers
-        - Run: !pip install gensim OR add to cluster initialization
-        
-    Recommended Spark settings for large models:
-        spark.executor.cores=1
-        spark.task.cpus=1
-        spark.python.worker.reuse=true
+    Distributed embedding writer:
+      input: RDD[(title:str, doc_id:int)]
+      output: Parquet at gs://{bucket_name}/embeddings/{output_prefix}_parquet/
+
+    Notes:
+    - No broadcast, no collect.
+    - Avoids doc_title_pairs.count() and df.count() to prevent extra full passes.
+    - Requires gensim installed on all nodes (you already rebuilt the cluster).
+    - If model isn't cached on nodes, gensim may download it the first time per node.
     """
-    print(f"Creating embeddings using model: {model_name}")
-    print(f"Processing {doc_title_pairs.count()} documents...")
-    
-    # Serialize RE_WORD pattern and stopwords for use in workers
+    if spark is None:
+        # SparkSession must be created/imported in the notebook
+        spark = SparkSession.builder.getOrCreate()
+
     re_pattern = RE_WORD.pattern
     re_flags = RE_WORD.flags
-    stopwords_set = set(all_stopwords)
-    
-    print("Computing embeddings in parallel...")
-    
-    # Use lambda to pass arguments to the helper function
+    stopwords_frozen = frozenset(all_stopwords)
+
     embeddings_rdd = doc_title_pairs.mapPartitions(
         lambda rows: _compute_embeddings_for_partition(
-            rows, model_name, re_pattern, re_flags, stopwords_set
+            rows, model_name, re_pattern, re_flags, stopwords_frozen
         )
     )
-    
-    # Create DataFrame with proper schema
-    schema = StructType([
-        StructField("doc_id", IntegerType(), False),
-        StructField("embedding", ArrayType(FloatType()), False),
-    ])
-    
-    spark = SparkSession.builder.getOrCreate()
-    df = spark.createDataFrame(embeddings_rdd, schema=schema)
-    
-    # Write distributed to GCS as Parquet (NO collect - avoids driver OOM)
+
+    df = spark.createDataFrame(embeddings_rdd, schema="doc_id INT, embedding ARRAY<FLOAT>")
+
+    if coalesce_files is not None and coalesce_files > 0:
+        df = df.coalesce(int(coalesce_files))
+
     output_path = f"gs://{bucket_name}/embeddings/{output_prefix}_parquet/"
-    print(f"Writing embeddings to {output_path}...")
-    
+    print(f"Writing embeddings to: {output_path}")
     df.write.mode("overwrite").parquet(output_path)
-    
-    # Get count without collecting all data
-    num_embeddings = df.count()
-    
-    print(f"✅ Successfully created embeddings for {num_embeddings:,} documents")
-    print(f"✅ Saved to: {output_path}")
-    print(f"\nTo read later:")
-    print(f"  df = spark.read.parquet('{output_path}')")
-    print(f"  # or in Python: pd.read_parquet('{output_path}')")
-    
+
+    print("Done.")
     return output_path

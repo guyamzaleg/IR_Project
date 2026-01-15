@@ -61,6 +61,42 @@ def load_doc_titles():
     except FileNotFoundError:
         return {}
 
+
+def load_embeddings(field='title'):
+    """
+    Load embeddings from parquet files into a dict for fast lookup.
+
+    Returns:
+    --------
+        dict: {doc_id: np.array} mapping document IDs to embedding vectors
+    """
+    import pyarrow.parquet as pq
+    from pathlib import Path
+
+    print(f"Loading {field} embeddings...")
+    embeddings_dir = Path(f'data/embeddings/{field}')
+
+    if not embeddings_dir.exists():
+        print(f"⚠ Embeddings directory not found: {embeddings_dir}")
+        return {}
+
+    parquet_files = list(embeddings_dir.glob('*.parquet'))
+    if not parquet_files:
+        print(f"⚠ No parquet files found in {embeddings_dir}")
+        return {}
+
+    embeddings_dict = {}
+    for pf in parquet_files:
+        table = pq.read_table(pf)
+        doc_ids = table['doc_id'].to_pylist()
+        vectors = table['embedding'].to_pylist()
+        for doc_id, vec in zip(doc_ids, vectors):
+            embeddings_dict[doc_id] = np.array(vec, dtype=np.float32)
+
+    print(f"✓ {field.capitalize()} Embeddings: {len(embeddings_dict)} documents")
+    return embeddings_dict
+
+
 # def load_embeddings(field='title') -> tuple:
 #     """Load embeddings and doc_ids."""
 #     import numpy as np
@@ -68,7 +104,7 @@ def load_doc_titles():
 #     embeddings = np.load(f'embeddings/{field}/{field}_embeddings.npy')
 #     return doc_ids, embeddings
 
-def load_all_data():
+def load_all_data(load_emb=True):
     """Load everything"""
     print("=" * 60)
     data = {
@@ -77,10 +113,9 @@ def load_all_data():
         'pageviews': load_pageviews(),
         'titles': load_doc_titles()
     }
-    
-    # doc_ids, embeddings = load_embeddings('title')
-    # if doc_ids is not None:
-    #     data['embeddings'] = {'doc_ids': doc_ids, 'vectors': embeddings}
-    
+
+    if load_emb:
+        data['embeddings'] = load_embeddings('title')
+
     print("=" * 60)
     return data

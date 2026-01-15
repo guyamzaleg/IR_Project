@@ -37,11 +37,11 @@ GRID_CONFIG = {
 
     # weights (normalized to sum to 1.0)
     'weights': {
-        'text_w': [0.4, 0.5, 0.6],      # Primary text matching
-        'title_w': [0.2, 0.25, 0.3],    # Title importance
-        'anchor_w': [0.05, 0.1],        # Anchor text
-        'pr_w': [0.05, 0.1],            # PageRank authority
-        'pv_w': [0.05, 0.1],            # PageViews popularity
+        'text_w': [0.6],      # Primary text matching
+        'title_w': [0.2],    # Title importance
+        'anchor_w': [0.0, 0.05],        # Anchor text
+        'pr_w': [0.0, 0.05],            # PageRank authority
+        'pv_w': [0.1],            # PageViews popularity
     },
 }
 
@@ -62,28 +62,34 @@ class GridSearch:
         self.results = []
     
     # ========================================================================
-    # PHASE 1: SINGLE-INDEX RANKING METHODS
+    # Ranking Methods
     # ========================================================================
     
-    # def _phase1_single_index_ranking(self, queries: List[str]):
-    #     """Test all ranking methods on each index with default settings."""
-    #     print("\n📊 PHASE 1: Ranking Methods on Different Indices\n")
+    def _ranking_methods(self, queries: List[str]):
+        """Test different ranking method combinations."""
+        print("\n🎯 Testing Ranking Method Combinations\n")
         
-    #     tested = 0
-    #     for method in GRID_CONFIG['ranking_methods']:
-    #         for index_name in GRID_CONFIG['indices']:
-    #             config = {
-    #                 'index': index_name,
-    #                 'method': method,
-    #             }
-    #             self._test_config(config, queries)
-    #             tested += 1
-                
-    #             if tested % 5 == 0:
-    #                 print(f"  Tested {tested} configs...")
+        methods = GRID_CONFIG['ranking_methods']
         
-    #     print(f"✓ Phase 1 complete: {tested} configurations tested\n")
-
+        # Test all combinations of ranking methods for text, title, and anchor
+        all_combos = list(itertools.product(methods, methods, methods))
+        
+        print(f"  Testing {len(all_combos)} method combinations...\n")
+        
+        tested = 0
+        for text_method, title_method, anchor_method in all_combos:
+            self.engine.config['ranking_methods']['text'] = text_method
+            self.engine.config['ranking_methods']['title'] = title_method
+            self.engine.config['ranking_methods']['anchor'] = anchor_method
+            
+            config_name = f"rank_t-{text_method}_ti-{title_method}_a-{anchor_method}"
+            self._test_config(config_name, queries)
+            tested += 1
+            
+            if tested % 20 == 0:
+                print(f"  Tested {tested}/{len(all_combos)} configs...")
+        
+        print(f"\n✓ Ranking method testing complete: {tested} configurations tested\n")
     # ========================================================================
     # BM25 HYPERPARAMETER TUNING
     # ========================================================================
@@ -139,7 +145,7 @@ class GridSearch:
         # Filter to only keep combinations that sum to ~1.0 (within tolerance)
         weight_configs = [
             combo for combo in all_combos 
-            if abs(sum(combo) - 1.0) < 0.01  # Allow small rounding errors
+            if abs(sum(combo) - 1.0) < 0.5  # Allow small rounding errors
         ]
         
         print(f"  Testing {len(weight_configs)} weight combinations (sum=1.0)...\n")
@@ -182,36 +188,6 @@ class GridSearch:
                        
         
         print(f"✓ Stemming configurations tested\n")
-    
-    # ========================================================================
-    # Ranking Methods
-    # ========================================================================
-    
-    def _ranking_methods(self, queries: List[str]):
-        """Test different ranking method combinations."""
-        print("\n🎯 Testing Ranking Method Combinations\n")
-        
-        methods = GRID_CONFIG['ranking_methods']
-        
-        # Test all combinations of ranking methods for text, title, and anchor
-        all_combos = list(itertools.product(methods, methods, methods))
-        
-        print(f"  Testing {len(all_combos)} method combinations...\n")
-        
-        tested = 0
-        for text_method, title_method, anchor_method in all_combos:
-            self.engine.config['ranking_methods']['text'] = text_method
-            self.engine.config['ranking_methods']['title'] = title_method
-            self.engine.config['ranking_methods']['anchor'] = anchor_method
-            
-            config_name = f"rank_t-{text_method}_ti-{title_method}_a-{anchor_method}"
-            self._test_config(config_name, queries)
-            tested += 1
-            
-            if tested % 20 == 0:
-                print(f"  Tested {tested}/{len(all_combos)} configs...")
-        
-        print(f"\n✓ Ranking method testing complete: {tested} configurations tested\n")
     
     # ========================================================================
     # CORE TESTING LOGIC
@@ -308,4 +284,4 @@ def run_test(test):
 
 
 if __name__ == "__main__":
-    results_df = run_test("ranking")
+    results_df = run_test("weights")

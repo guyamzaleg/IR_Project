@@ -1,7 +1,5 @@
 from collections import defaultdict
 from flask import Flask, request, jsonify, render_template
-from Backend.tokenizer import tokenize
-from Backend.data_Loader import load_index, load_pagerank
 import os
 import math
 

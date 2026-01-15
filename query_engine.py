@@ -1,14 +1,16 @@
 import math
 from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
+import numpy as np
 
 from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score
-from Backend.tokenizer import tokenize
+from Backend.tokenizer import tokenize, RE_WORD, all_stopwords
 from Backend.data_Loader import load_all_data
 from inverted_index_gcp import InvertedIndex
 
 N_DOCS = 6348910
 DEFAULT_AVGDL = 500
+EMBEDDING_MODEL = 'glove-wiki-gigaword-100'
 
 CONFIG = {
     'n_docs': N_DOCS,
@@ -86,15 +88,15 @@ class SearchEngine:
         # Get scores from all indices
         text_scores = self._get_text_scores(tokens, self.config['top_n_candidates'])
         title_scores = self._get_title_scores(tokens, top_n=self.config['top_n_candidates'])
-        anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['top_n_candidates'])
+        # anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['top_n_candidates'])
         
         # Combine with weights
         combined = self._combine_signals(
-            text_scores, title_scores, anchor_scores,
+            text_scores, title_scores, #anchor_scores,
             text_w=self.config['weights']['text'],
             title_w=self.config['weights']['title'],
-            anchor_w=self.config['weights']['anchor'],
-            pr_w=self.config['weights']['pagerank'],
+            # anchor_w=self.config['weights']['anchor'],
+            # pr_w=self.config['weights']['pagerank'],
             pv_w=self.config['weights']['pageviews']
         )
         
@@ -192,20 +194,21 @@ class SearchEngine:
         self, 
         text_scores: Dict[int, float],
         title_scores: Dict[int, float],
-        anchor_scores: Dict[int, float],
-        text_w: float, title_w: float, anchor_w: float,
-        pr_w: float, pv_w: float
+        # anchor_scores: Dict[int, float],
+        text_w: float, title_w: float,# anchor_w: float,
+        # pr_w: float,
+        pv_w: float
     ) -> Dict[int, float]:
         """Combine all ranking signals with weights."""
-        all_docs = set(text_scores) | set(title_scores) | set(anchor_scores)
+        all_docs = set(text_scores) | set(title_scores)# | set(anchor_scores)
         
         combined = {}
         for doc_id in all_docs:
             combined[doc_id] = (
                 text_scores.get(doc_id, 0.0) * text_w +
                 title_scores.get(doc_id, 0.0) * title_w +
-                anchor_scores.get(doc_id, 0.0) * anchor_w +
-                self._norm_pr(doc_id) * pr_w +
+                # anchor_scores.get(doc_id, 0.0) * anchor_w +
+                # self._norm_pr(doc_id) * pr_w +
                 self._norm_pv(doc_id) * pv_w
             )
         
