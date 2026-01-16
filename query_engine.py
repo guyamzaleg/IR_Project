@@ -100,19 +100,16 @@ class SearchEngine:
         # ---- BM25 retrieval ----
         text_bm25_scores = self._get_text_scores(tokens, self.config['retrieval']['top_n_candidates'])
         title_bm25_scores = self._get_title_scores(tokens, top_n=self.config['retrieval']['top_n_candidates'])
-        # anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['retrieval']['top_n_candidates'])
 
         # ---- ANN retrieval (FAISS) ----
         query_emb = self._compute_query_embedding(tokens)
         text_ann_scores = self._get_ann_scores(query_emb, self.text_faiss, self.text_faiss_docids)
-        title_ann_scores = self._get_ann_scores(query_emb, self.title_faiss, self.title_faiss_docids)
 
         # ---- Combine scores ----
         combined = self._combine_scores(
             text_bm25_scores,
             title_bm25_scores,
             text_ann_scores,
-            title_ann_scores,
         )
 
         # Sort and return
@@ -125,11 +122,9 @@ class SearchEngine:
     
     def search_title(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
         return self._search_single_index(query, self.title_index, top_k)
-        # return self._search_partial_index(query, self.title_index, top_k)
     
     def search_anchor(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
         return self._search_single_index(query, self.anchor_index, top_k)
-        # return self._search_partial_index(query, self.anchor_index, top_k)
     
     # ========================================================================
     # HELPER METHODS - SCORING
@@ -146,15 +141,13 @@ class SearchEngine:
     def _combine_scores(self, 
                         text_bm25_scores,
                         title_bm25_scores,
-                        text_ann_scores,
-                        title_ann_scores,
+                        text_ann_scores
                         ) -> Dict[int, float]:
         weights = self.config['weights']
         all_candidates = (
             set(text_bm25_scores.keys()) |
             set(title_bm25_scores.keys()) |
-            set(text_ann_scores.keys()) |
-            set(title_ann_scores.keys())
+            set(text_ann_scores.keys())
         )
 
         # ---- Blend signals ----
@@ -164,9 +157,6 @@ class SearchEngine:
                 text_bm25_scores.get(doc_id, 0.0) * weights['text_bm25'] +
                 title_bm25_scores.get(doc_id, 0.0) * weights['title_bm25'] +
                 text_ann_scores.get(doc_id, 0.0) * weights['text_ann'] +
-                title_ann_scores.get(doc_id, 0.0) * weights['title_ann'] +
-                # anchor_scores.get(doc_id, 0.0) * weights['anchor'] +
-                # self._norm_pr(doc_id) * weights['pagerank'] +
                 self._norm_pv(doc_id) * weights['pageviews']
             )
         return combined
