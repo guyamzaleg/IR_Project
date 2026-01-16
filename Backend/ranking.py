@@ -217,22 +217,76 @@ def pagerank_score(doc_ids: List[int], pagerank_dict: Dict[int, float]) -> Count
 def pageviews_score(doc_ids: List[int], pageviews_dict: Dict[int, int]) -> Counter:
     """
     Rank documents purely by PageViews count (query-independent).
-    
+
     Args:
         doc_ids: List of document IDs to rank (or empty list for all docs)
         pageviews_dict: Dictionary mapping doc_id to pageview count
-    
+
     Returns:
         Counter with doc_id as key and pageview count as value
     """
     scores = Counter()
-    
+
     # If no specific docs provided, use all available
     if not doc_ids:
         doc_ids = list(pageviews_dict.keys())
-    
+
     for doc_id in doc_ids:
         scores[doc_id] = pageviews_dict.get(doc_id, 0)
-    
+
+    return scores
+
+
+# ============================================================================
+# ANN (Approximate Nearest Neighbor) Search using FAISS
+# ============================================================================
+
+def ann_search(
+    query_embedding: np.ndarray,
+    faiss_index,
+    doc_ids_array: np.ndarray,
+    top_k: int = 500,
+    nprobe: int = 64
+) -> Counter:
+    """
+    Perform ANN search using a FAISS IVF-PQ index.
+
+    The index was built with L2-normalized vectors and METRIC_INNER_PRODUCT,
+    so we must L2-normalize the query embedding before searching (IP on unit
+    vectors == cosine similarity).
+
+    Args:
+        query_embedding: Query vector (raw mean of token embeddings, not normalized)
+        faiss_index: Loaded FAISS IndexIVFPQ with METRIC_INNER_PRODUCT
+        doc_ids_array: Numpy array mapping FAISS internal IDs to doc_ids
+        top_k: Number of nearest neighbors to retrieve
+        nprobe: Number of clusters to probe (higher = more accurate, slower)
+
+    Returns:
+        Counter with doc_id as key and similarity score as value
+    """
+    if query_embedding is None or faiss_index is None:
+        return Counter()
+
+    # L2-normalize the query (same as indexing)
+    query_norm = np.linalg.norm(query_embedding)
+    if query_norm < 1e-12:
+        return Counter()
+    query_normalized = (query_embedding / query_norm).reshape(1, -1).astype(np.float32)
+
+    # Set nprobe for IVF index
+    faiss_index.nprobe = nprobe
+
+    # Search returns (distances, indices) - distances are inner products (cosine sim)
+    distances, indices = faiss_index.search(query_normalized, top_k)
+
+    scores = Counter()
+    for i, (dist, idx) in enumerate(zip(distances[0], indices[0])):
+        if idx == -1:  # FAISS returns -1 for missing results
+            continue
+        doc_id = int(doc_ids_array[idx])
+        # Inner product on unit vectors is cosine similarity, already in [-1, 1]
+        scores[doc_id] = float(dist)
+
     return scores
 

@@ -37,11 +37,17 @@ GRID_CONFIG = {
 
     # weights (normalized to sum to 1.0)
     'weights': {
-        'text_w': [0.6],      # Primary text matching
-        'title_w': [0.2],    # Title importance
-        'anchor_w': [0.0, 0.05],        # Anchor text
-        'pr_w': [0.0, 0.05],            # PageRank authority
-        'pv_w': [0.1],            # PageViews popularity
+        'text_bm25':  [0.60, 0.70, 0.80],
+        'title_bm25': [0.10, 0.15, 0.20],
+        'pv':       [0.00, 0.05, 0.10],
+        'text_ann':   [0.125, 0.15, 0.20],
+        'title_ann':  [0.00, 0.05, 0.10],
+    },
+
+    'retrieval': {
+        'top_k': [250, 500, 750],          # Number of ANN candidates to retrieve
+        'nprobe': [32, 64,128],          # IVF clusters to probe (higher = more accurate)
+        'top_n_candidates': [100, 250, 500, 750, 1000] # Number of candidates to re-rank BM25
     },
 }
 
@@ -95,7 +101,7 @@ class GridSearch:
     # ========================================================================
     
     def _BM25(self, queries: List[str]):
-        """Test BM25 with different hyperparameters, stemming, and query boost."""
+        """Test BM25 with different hyperparameters"""
         print("\n🔧 BM25 Hyperparameter Tuning\n")
          
         tested = 0
@@ -123,7 +129,7 @@ class GridSearch:
                     if tested % 20 == 0:
                         print(f"  Progress: {tested}/{total} configs tested...")    
                         
-        print(f"✓ Phase 2 complete: {tested} configurations tested\n")
+        print(f"✓ BM25 tuning complete: {tested} configurations tested\n")
     
     # ========================================================================
     # WEIGHT OPTIMIZATION
@@ -135,11 +141,11 @@ class GridSearch:
         
         # Generate all weight combinations
         all_combos = list(itertools.product(
-            GRID_CONFIG['weights']['text_w'],
-            GRID_CONFIG['weights']['title_w'],
-            GRID_CONFIG['weights']['anchor_w'],
-            GRID_CONFIG['weights']['pr_w'],
-            GRID_CONFIG['weights']['pv_w'],
+            GRID_CONFIG['weights']['text_bm25'],
+            GRID_CONFIG['weights']['title_bm25'],
+            GRID_CONFIG['weights']['pv'],
+            GRID_CONFIG['weights']['text_ann'],
+            GRID_CONFIG['weights']['title_ann'],
         ))
         
         # Filter to only keep combinations that sum to ~1.0 (within tolerance)
@@ -152,14 +158,15 @@ class GridSearch:
         print(f"  (Filtered from {len(all_combos)} total combinations)\n")
         
         tested = 0
-        for text_w, title_w, anchor_w, pr_w, pv_w in weight_configs:
-            self.engine.config['weights']['text'] = text_w
-            self.engine.config['weights']['title'] = title_w
-            self.engine.config['weights']['anchor'] = anchor_w
-            self.engine.config['weights']['pr'] = pr_w
-            self.engine.config['weights']['pv'] = pv_w
-            config_name = "weights_t{:.2f}_ti{:.2f}_a{:.2f}_pr{:.2f}_pv{:.2f}".format(
-                text_w, title_w, anchor_w, pr_w, pv_w
+        # for text_w, title_w, anchor_w, pr_w, pv in weight_configs:
+        for text_bm25_w, title_bm25_w, pv, text_ann_w, title_ann_w in weight_configs:
+            self.engine.config['weights']['text_bm25'] = text_bm25_w
+            self.engine.config['weights']['title_bm25'] = title_bm25_w
+            self.engine.config['weights']['pv'] = pv
+            self.engine.config['weights']['text_ann'] = text_ann_w
+            self.engine.config['weights']['title_ann'] = title_ann_w
+            config_name = "weights_textbm25{:.2f}_titlebm25{:.2f}_pv{:.2f}_textann{:.2f}_titleann{:.2f}".format(
+                text_bm25_w, title_bm25_w, pv, text_ann_w, title_ann_w
             )
             
             self._test_config(config_name, queries)
@@ -188,7 +195,35 @@ class GridSearch:
                        
         
         print(f"✓ Stemming configurations tested\n")
+
+    # ========================================================================
+    # retrieval
+    # ========================================================================
     
+    def _retrieval(self, queries: List[str]):
+        """Test Embedding with different hyperparameters"""
+        print("\n🔧 Embeddings Hyperparameter Tuning\n")
+         
+        tested = 0
+        total = (len(GRID_CONFIG['retrieval']['top_k']) * 
+                len(GRID_CONFIG['retrieval']['nprobe']) *
+                len(GRID_CONFIG['retrieval']['top_n_candidates'])
+                )
+        
+        print(f"  Testing {total} configurations...\n")
+        
+        for top_k in GRID_CONFIG['retrieval']['top_k']:
+            for nprobe in GRID_CONFIG['retrieval']['nprobe']:
+                for top_n_candidates in GRID_CONFIG['retrieval']['top_n_candidates']:
+                    self.engine.config['retrieval']['top_k'] = top_k
+                    self.engine.config['retrieval']['nprobe'] = nprobe
+                    self.engine.config['retrieval']['top_n_candidates'] = top_n_candidates
+                    config_name = f"embeddings_top_k{top_k}_nprobe{nprobe}_topn{top_n_candidates}"     
+                    self._test_config(config_name, queries)
+                    tested += 1   
+                        
+        print(f"✓ Embeddings tuning complete: {tested} configurations tested\n")
+
     # ========================================================================
     # CORE TESTING LOGIC
     # ========================================================================
@@ -260,6 +295,9 @@ def run_test(test):
     if test == 'ranking':
         optimizer._ranking_methods(queries)
     
+    if test == 'retrieval':
+        optimizer._retrieval(queries)
+    
     # Convert to DataFrame and save
     df = pd.DataFrame(optimizer.results)
     df = df.sort_values('avg_P@10', ascending=False)
@@ -284,4 +322,4 @@ def run_test(test):
 
 
 if __name__ == "__main__":
-    results_df = run_test("weights")
+    results_df = run_test("retrieval")

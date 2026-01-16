@@ -1,0 +1,63 @@
+TOP 20 CONFIGURATIONS
+====================================================================================================
+
+#1: embeddings_top_k250_nprobe64
+     HM(P@5,F1@30)=0.4913 | P@10=0.7100 | Time=0.405s
+
+#2: embeddings_top_k250_nprobe32
+     HM(P@5,F1@30)=0.4920 | P@10=0.7067 | Time=0.406s
+
+#3: embeddings_top_k100_nprobe32
+     HM(P@5,F1@30)=0.4925 | P@10=0.7067 | Time=0.416s
+
+#4: embeddings_top_k100_nprobe64
+     HM(P@5,F1@30)=0.4925 | P@10=0.7067 | Time=0.469s
+
+#5: embeddings_top_k750_nprobe64
+     HM(P@5,F1@30)=0.5025 | P@10=0.7033 | Time=0.407s
+
+#6: embeddings_top_k250_nprobe16
+     HM(P@5,F1@30)=0.4927 | P@10=0.7033 | Time=0.407s
+
+#7: embeddings_top_k1000_nprobe64
+     HM(P@5,F1@30)=0.5064 | P@10=0.7033 | Time=0.416s
+
+#8: embeddings_top_k250_nprobe16
+     HM(P@5,F1@30)=0.5128 | P@10=0.7000 | Time=0.408s
+
+#9: embeddings_top_k750_nprobe32
+     HM(P@5,F1@30)=0.5034 | P@10=0.7000 | Time=0.407s
+
+#10: embeddings_top_k500_nprobe64
+     HM(P@5,F1@30)=0.5039 | P@10=0.7000 | Time=0.409s
+
+#11: embeddings_top_k500_nprobe16
+     HM(P@5,F1@30)=0.5126 | P@10=0.7000 | Time=0.408s
+
+#12: embeddings_top_k750_nprobe64
+     HM(P@5,F1@30)=0.4953 | P@10=0.7000 | Time=0.408s
+
+#13: embeddings_top_k1000_nprobe32
+     HM(P@5,F1@30)=0.5051 | P@10=0.7000 | Time=0.407s
+
+#14: embeddings_top_k100_nprobe16
+     HM(P@5,F1@30)=0.4919 | P@10=0.7000 | Time=0.446s
+
+#15: embeddings_top_k250_nprobe32
+     HM(P@5,F1@30)=0.5138 | P@10=0.6967 | Time=0.407s
+
+#16: embeddings_top_k250_nprobe64
+     HM(P@5,F1@30)=0.5145 | P@10=0.6967 | Time=0.407s
+
+#17: embeddings_top_k500_nprobe32
+     HM(P@5,F1@30)=0.5092 | P@10=0.6967 | Time=0.418s
+
+#18: embeddings_top_k100_nprobe16
+     HM(P@5,F1@30)=0.5232 | P@10=0.6967 | Time=0.434s
+
+#19: embeddings_top_k1000_nprobe64
+     HM(P@5,F1@30)=0.4983 | P@10=0.6933 | Time=0.420s
+
+#20: embeddings_top_k750_nprobe64
+     HM(P@5,F1@30)=0.5044 | P@10=0.6933 | Time=0.411s
+

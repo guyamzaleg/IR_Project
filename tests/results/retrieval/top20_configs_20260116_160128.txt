@@ -1,0 +1,63 @@
+TOP 20 CONFIGURATIONS
+====================================================================================================
+
+#1: embeddings_top_k750_nprobe128_topn750
+     HM(P@5,F1@30)=0.5414 | P@10=0.7467 | Time=1.105s
+
+#2: embeddings_top_k750_nprobe64_topn750
+     HM(P@5,F1@30)=0.5414 | P@10=0.7467 | Time=1.113s
+
+#3: embeddings_top_k500_nprobe32_topn750
+     HM(P@5,F1@30)=0.5458 | P@10=0.7433 | Time=1.042s
+
+#4: embeddings_top_k750_nprobe32_topn750
+     HM(P@5,F1@30)=0.5431 | P@10=0.7433 | Time=0.477s
+
+#5: embeddings_top_k500_nprobe128_topn750
+     HM(P@5,F1@30)=0.5441 | P@10=0.7433 | Time=1.166s
+
+#6: embeddings_top_k500_nprobe64_topn750
+     HM(P@5,F1@30)=0.5441 | P@10=0.7433 | Time=1.066s
+
+#7: embeddings_top_k250_nprobe128_topn750
+     HM(P@5,F1@30)=0.5430 | P@10=0.7400 | Time=1.064s
+
+#8: embeddings_top_k250_nprobe32_topn750
+     HM(P@5,F1@30)=0.5440 | P@10=0.7400 | Time=1.068s
+
+#9: embeddings_top_k250_nprobe64_topn750
+     HM(P@5,F1@30)=0.5440 | P@10=0.7400 | Time=1.037s
+
+#10: embeddings_top_k500_nprobe32_topn500
+     HM(P@5,F1@30)=0.5279 | P@10=0.7300 | Time=1.046s
+
+#11: embeddings_top_k500_nprobe64_topn500
+     HM(P@5,F1@30)=0.5263 | P@10=0.7300 | Time=1.074s
+
+#12: embeddings_top_k500_nprobe128_topn500
+     HM(P@5,F1@30)=0.5263 | P@10=0.7300 | Time=1.090s
+
+#13: embeddings_top_k750_nprobe64_topn500
+     HM(P@5,F1@30)=0.5237 | P@10=0.7300 | Time=0.531s
+
+#14: embeddings_top_k250_nprobe128_topn500
+     HM(P@5,F1@30)=0.5270 | P@10=0.7300 | Time=1.043s
+
+#15: embeddings_top_k250_nprobe64_topn500
+     HM(P@5,F1@30)=0.5270 | P@10=0.7300 | Time=1.037s
+
+#16: embeddings_top_k750_nprobe128_topn500
+     HM(P@5,F1@30)=0.5237 | P@10=0.7300 | Time=1.135s
+
+#17: embeddings_top_k250_nprobe32_topn500
+     HM(P@5,F1@30)=0.5270 | P@10=0.7300 | Time=1.131s
+
+#18: embeddings_top_k750_nprobe32_topn500
+     HM(P@5,F1@30)=0.5261 | P@10=0.7267 | Time=0.478s
+
+#19: embeddings_top_k500_nprobe128_topn1000
+     HM(P@5,F1@30)=0.5410 | P@10=0.7267 | Time=1.118s
+
+#20: embeddings_top_k750_nprobe64_topn1000
+     HM(P@5,F1@30)=0.5390 | P@10=0.7267 | Time=1.138s
+

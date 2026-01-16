@@ -61,61 +61,58 @@ def load_doc_titles():
     except FileNotFoundError:
         return {}
 
-
-def load_embeddings(field='title'):
+def load_faiss_index(index_name='text'):
     """
-    Load embeddings from parquet files into a dict for fast lookup.
+    Load a FAISS index and its corresponding doc_ids mapping.
+
+    Args:
+        index_name: 'text' or 'title'
 
     Returns:
-    --------
-        dict: {doc_id: np.array} mapping document IDs to embedding vectors
+        tuple: (faiss_index, doc_ids_array) or (None, None) if not found
     """
-    import pyarrow.parquet as pq
+    import faiss
     from pathlib import Path
 
-    print(f"Loading {field} embeddings...")
-    embeddings_dir = Path(f'data/embeddings/{field}')
+    index_path = Path(f'data/embeddings/{index_name}_vector/{index_name}_index.faiss')
+    docids_path = Path(f'data/embeddings/{index_name}_vector/doc_ids.npy')
 
-    if not embeddings_dir.exists():
-        print(f"⚠ Embeddings directory not found: {embeddings_dir}")
-        return {}
+    if not index_path.exists():
+        print(f"⚠ FAISS index not found: {index_path}")
+        return None, None
 
-    parquet_files = list(embeddings_dir.glob('*.parquet'))
-    if not parquet_files:
-        print(f"⚠ No parquet files found in {embeddings_dir}")
-        return {}
+    if not docids_path.exists():
+        print(f"⚠ Doc IDs mapping not found: {docids_path}")
+        return None, None
 
-    embeddings_dict = {}
-    for pf in parquet_files:
-        table = pq.read_table(pf)
-        doc_ids = table['doc_id'].to_pylist()
-        vectors = table['embedding'].to_pylist()
-        for doc_id, vec in zip(doc_ids, vectors):
-            embeddings_dict[doc_id] = np.array(vec, dtype=np.float32)
+    print(f"Loading FAISS index: {index_name}...")
+    faiss_index = faiss.read_index(str(index_path))
 
-    print(f"✓ {field.capitalize()} Embeddings: {len(embeddings_dict)} documents")
-    return embeddings_dict
+    # doc_ids.npy was saved as memmap (see vector_indexer.py), load accordingly
+    doc_ids = np.memmap(str(docids_path), dtype=np.int32, mode='r')
+
+    print(f"✓ FAISS {index_name}: {faiss_index.ntotal} vectors, {len(doc_ids)} doc_ids")
+    return faiss_index, doc_ids
 
 
-# def load_embeddings(field='title') -> tuple:
-#     """Load embeddings and doc_ids."""
-#     import numpy as np
-#     doc_ids = np.load(f'embeddings/{field}/{field}_doc_ids.npy')
-#     embeddings = np.load(f'embeddings/{field}/{field}_embeddings.npy')
-#     return doc_ids, embeddings
-
-def load_all_data(load_emb=True):
+def load_all_data():
     """Load everything"""
     print("=" * 60)
+
+    # Load FAISS indexes
+    text_faiss, text_faiss_docids = load_faiss_index('text')
+    title_faiss, title_faiss_docids = load_faiss_index('title')
+
     data = {
         'indexes': load_all_indexes(),
         'pagerank': load_pagerank(),
         'pageviews': load_pageviews(),
-        'titles': load_doc_titles()
+        'titles': load_doc_titles(),
+        'text_faiss': text_faiss,
+        'text_faiss_docids': text_faiss_docids,
+        'title_faiss': title_faiss,
+        'title_faiss_docids': title_faiss_docids,
     }
-
-    if load_emb:
-        data['embeddings'] = load_embeddings('title')
 
     print("=" * 60)
     return data

@@ -3,8 +3,8 @@ from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
 import numpy as np
 
-from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score
-from Backend.tokenizer import tokenize, RE_WORD, all_stopwords
+from Backend.ranking import BM25_score, word_count_score, cosine_similarity, tf_count_score, ann_search
+from Backend.tokenizer import tokenize
 from Backend.data_Loader import load_all_data
 from inverted_index_gcp import InvertedIndex
 
@@ -18,88 +18,103 @@ CONFIG = {
     'bm25_text': {'k1': 1.2, 'b': 0.9, 'k3': 2.0},
     'bm25_title': {'k1': 1.2, 'b': 0.9, 'k3': 2.0},
     'weights': {
-        'text': 0.6,
-        'title': 0.2,
-        'anchor': 0.05,
-        'pagerank': 0.05,
-        'pageviews': 0.1
+        'text_bm25': 0.7,
+        'title_bm25': 0.2,
+        'text_ann': 0.12,
+        'title_ann': 0.0,
+        # 'anchor': 0.05,
+        # 'pagerank': 0.05,
+        'pageviews': 0.1,
     },
     'ranking_methods': {
         'text': 'BM25',        # Best performance (grid search validated)
         'title': 'BM25',       # Best performance (grid search validated)
-        'anchor': 'word_count' # Fastest with same accuracy (grid search validated)
+        # 'anchor': 'word_count' # Fastest with same accuracy (grid search validated)
     },
-    'top_n_candidates': 500,
+    'retrieval': {
+        'top_k': 750,          # Number of ANN candidates to retrieve
+        'nprobe': 128,          # IVF clusters to probe (higher = more accurate)
+        'top_n_candidates': 750,
+    },
+    
     'use_stemming': False
 }
 
 class SearchEngine:
     """Main search engine with hybrid ranking."""
-    
+
     def __init__(self, config: Dict = CONFIG):
         print("🔧 Initializing Search Engine...")
 
         self.config = config
 
         data = load_all_data()
-        
+
         self.text_index = data['indexes']['text']
         self.title_index = data['indexes']['title']
         self.anchor_index = data['indexes']['anchor']
         self.pagerank_dict = data['pagerank']
         self.pageviews_dict = data['pageviews']
         self.doc_titles_dict = data['titles']
-        # self.embeddings = data.get('embeddings')
-        
-        self._precompute_normalization()
-        
-        print("✅ Search Engine Ready!")
-    
-    def _precompute_normalization(self):
-        """Precompute normalization parameters."""
-        # PageRank normalization
-        if self.pagerank_dict:
-            pr_values = list(self.pagerank_dict.values())
-            self.pr_max = max(pr_values)
-            self.pr_min = min(pr_values)
-            self.pr_range = self.pr_max - self.pr_min if self.pr_max > self.pr_min else 1.0
-        else:
-            self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
-        
-        # PageViews normalization
-        self.pv_max = max(self.pageviews_dict.values()) if self.pageviews_dict else 1.0
 
-        # Precompute document lengths and averages
-        self.text_doc_lengths = self.text_index.DL if hasattr(self.text_index, 'DL') else {}
-        self.text_avg_dl = sum(self.text_doc_lengths.values()) / len(self.text_doc_lengths) if self.text_doc_lengths else DEFAULT_AVGDL
-    
-        self.title_doc_lengths = self.title_index.DL if hasattr(self.title_index, 'DL') else {}
-        self.title_avg_dl = sum(self.title_doc_lengths.values()) / len(self.title_doc_lengths) if self.title_doc_lengths else DEFAULT_AVGDL
-    
+        # FAISS indexes for ANN search
+        self.text_faiss = data.get('text_faiss')
+        self.text_faiss_docids = data.get('text_faiss_docids')
+        self.title_faiss = data.get('title_faiss')
+        self.title_faiss_docids = data.get('title_faiss_docids')
+
+        # Load GloVe model for query embeddings (needed for both dict-based and FAISS-based)
+        needs_embeddings = (
+            self.text_faiss is not None or self.title_faiss is not None
+        )
+        if needs_embeddings:
+            print(f"Loading embedding model: {EMBEDDING_MODEL}...")
+            import gensim.downloader as api
+            self.embedding_model = api.load(EMBEDDING_MODEL)
+            print(f"✓ Embedding model loaded ({len(self.embedding_model)} words)")
+        else:
+            self.embedding_model = None
+
+        self._precompute_normalization()
+
+        print("✅ Search Engine Ready!")
     # ========================================================================
     # MAIN SEARCH METHODS
     # ========================================================================
     def search(self, query: str, top_k: int = 100) -> List[Tuple[str, str]]:
-        """Main hybrid search combining all signals."""
-        tokens = tokenize(query,  self.config['use_stemming'])
+        """
+        Main hybrid search.
+
+        Pipeline:
+        1. Tokenize query
+        2. BM25 retrieval from text and title indexes
+        3. ANN retrieval from FAISS indexes
+        4. Union candidates from BM25 and ANN
+        5. Normalize and blend all signals with weights
+        6. Return top-k results
+        """
+        tokens = tokenize(query, self.config['use_stemming'])
         if not tokens:
             return []
-        
-        # Get scores from all indices
-        text_scores = self._get_text_scores(tokens, self.config['top_n_candidates'])
-        title_scores = self._get_title_scores(tokens, top_n=self.config['top_n_candidates'])
-        # anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['top_n_candidates'])
-        
-        # Combine with weights
-        combined = self._combine_signals(
-            text_scores, title_scores, #anchor_scores,
-            text_w=self.config['weights']['text'],
-            title_w=self.config['weights']['title'],
-            # anchor_w=self.config['weights']['anchor'],
-            # pr_w=self.config['weights']['pagerank'],
-            pv_w=self.config['weights']['pageviews']
+
+        # ---- BM25 retrieval ----
+        text_bm25_scores = self._get_text_scores(tokens, self.config['retrieval']['top_n_candidates'])
+        title_bm25_scores = self._get_title_scores(tokens, top_n=self.config['retrieval']['top_n_candidates'])
+        # anchor_scores = self._get_anchor_scores(tokens, top_n=self.config['retrieval']['top_n_candidates'])
+
+        # ---- ANN retrieval (FAISS) ----
+        query_emb = self._compute_query_embedding(tokens)
+        text_ann_scores = self._get_ann_scores(query_emb, self.text_faiss, self.text_faiss_docids)
+        title_ann_scores = self._get_ann_scores(query_emb, self.title_faiss, self.title_faiss_docids)
+
+        # ---- Combine scores ----
+        combined = self._combine_scores(
+            text_bm25_scores,
+            title_bm25_scores,
+            text_ann_scores,
+            title_ann_scores,
         )
-        
+
         # Sort and return
         sorted_docs = sorted(combined.items(), key=lambda x: x[1], reverse=True)[:top_k]
         return self._format_results([doc_id for doc_id, _ in sorted_docs])
@@ -119,29 +134,45 @@ class SearchEngine:
     # ========================================================================
     # HELPER METHODS - SCORING
     # ========================================================================
+    def _compute_query_embedding(self, tokens: List[str]) -> np.ndarray:
+        """Compute query embedding as mean of token vectors (same as indexing)."""
+        if not self.embedding_model:
+            return None
+        valid_tokens = [t for t in tokens if t in self.embedding_model]
+        if not valid_tokens:
+            return None
+        return self.embedding_model.get_mean_vector(valid_tokens, pre_normalize=False).astype(np.float32)
+
+    def _combine_scores(self, 
+                        text_bm25_scores,
+                        title_bm25_scores,
+                        text_ann_scores,
+                        title_ann_scores,
+                        ) -> Dict[int, float]:
+        weights = self.config['weights']
+        all_candidates = (
+            set(text_bm25_scores.keys()) |
+            set(title_bm25_scores.keys()) |
+            set(text_ann_scores.keys()) |
+            set(title_ann_scores.keys())
+        )
+
+        # ---- Blend signals ----
+        combined = {}
+        for doc_id in all_candidates:
+            combined[doc_id] = (
+                text_bm25_scores.get(doc_id, 0.0) * weights['text_bm25'] +
+                title_bm25_scores.get(doc_id, 0.0) * weights['title_bm25'] +
+                text_ann_scores.get(doc_id, 0.0) * weights['text_ann'] +
+                title_ann_scores.get(doc_id, 0.0) * weights['title_ann'] +
+                # anchor_scores.get(doc_id, 0.0) * weights['anchor'] +
+                # self._norm_pr(doc_id) * weights['pagerank'] +
+                self._norm_pv(doc_id) * weights['pageviews']
+            )
+        return combined
     
     def _get_text_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]:
         """Get scores from text index using configured ranking method."""
-        # method = self.config['ranking_methods']['text']
-        
-        #before tuning - BM25 is best for all
-        # if method == 'BM25':
-        #     scores = BM25_score(
-        #         tokens, self.text_index, N_DOCS, 
-        #         self.text_doc_lengths, self.text_avg_dl, 
-        #         k1=self.config['bm25_text']['k1'], 
-        #         k3=self.config['bm25_text']['k3'], 
-        #         b=self.config['bm25_text']['b']
-        #     )
-        # elif method == 'cosine':
-        #     scores = cosine_similarity(tokens, self.text_index)
-        # elif method == 'word_count':
-        #     scores = word_count_score(tokens, self.text_index)
-        # elif method == 'tf_count':
-        #     scores = tf_count_score(tokens, self.text_index)
-        # else:
-        #     raise ValueError(f"Unknown ranking method: {method}")
-        
         scores = BM25_score(
                 tokens, self.text_index, N_DOCS, 
                 self.text_doc_lengths, self.text_avg_dl, 
@@ -154,31 +185,13 @@ class SearchEngine:
     
     def _get_title_scores(self, tokens: List[str], top_n: int) -> Dict[int, float]:
         """Get scores from title index using configured ranking method."""
-        # method = self.config['ranking_methods']['title']
-        
-        # if method == 'BM25':
-        #     scores = BM25_score(
-        #         tokens, self.title_index, N_DOCS, 
-        #         self.title_doc_lengths, self.title_avg_dl, 
-        #         k1=self.config['bm25_title']['k1'], 
-        #         k3=self.config['bm25_title']['k3'], 
-        #         b=self.config['bm25_title']['b']
-        #     )
-        # elif method == 'cosine':
-        #     scores = cosine_similarity(tokens, self.title_index)
-        # elif method == 'word_count':
-        #     scores = word_count_score(tokens, self.title_index)
-        # elif method == 'tf_count':
-        #     scores = tf_count_score(tokens, self.title_index)
-        # else:
-        #     raise ValueError(f"Unknown ranking method: {method}")
         scores = BM25_score(
             tokens, self.title_index, N_DOCS, 
-            self.title_doc_lengths, self.text_avg_dl, 
+            self.title_doc_lengths, self.title_avg_dl, 
             k1=self.config['bm25_title']['k1'], 
             k3=self.config['bm25_title']['k3'], 
             b=self.config['bm25_title']['b']
-                )
+            )
 
         return dict(self._normalize_list(scores.most_common(top_n)))
     
@@ -190,29 +203,12 @@ class SearchEngine:
             
         return dict(self._normalize_list(scores.most_common(top_n)))
     
-    def _combine_signals(
-        self, 
-        text_scores: Dict[int, float],
-        title_scores: Dict[int, float],
-        # anchor_scores: Dict[int, float],
-        text_w: float, title_w: float,# anchor_w: float,
-        # pr_w: float,
-        pv_w: float
-    ) -> Dict[int, float]:
-        """Combine all ranking signals with weights."""
-        all_docs = set(text_scores) | set(title_scores)# | set(anchor_scores)
-        
-        combined = {}
-        for doc_id in all_docs:
-            combined[doc_id] = (
-                text_scores.get(doc_id, 0.0) * text_w +
-                title_scores.get(doc_id, 0.0) * title_w +
-                # anchor_scores.get(doc_id, 0.0) * anchor_w +
-                # self._norm_pr(doc_id) * pr_w +
-                self._norm_pv(doc_id) * pv_w
+    def _get_ann_scores(self, query_emb: np.ndarray, faiss_index, faiss_docids) -> Dict[int, float]:
+        ann_raw = ann_search(
+            query_emb, faiss_index, faiss_docids,
+            top_k=self.config['retrieval']['top_k'], nprobe=self.config['retrieval']['nprobe']
             )
-        
-        return combined
+        return self._normalize_ann_scores(ann_raw)
     
     def _search_single_index(self, query: str, index: InvertedIndex, top_k: int) -> List[Tuple[str, str]]:
         """Search single index using BM25 (best performing method)."""
@@ -244,7 +240,39 @@ class SearchEngine:
     
     # ========================================================================
     # HELPER METHODS - NORMALIZATION
-    # ========================================================================
+    # ========================================================================   
+    def _precompute_normalization(self):
+        """Precompute normalization parameters."""
+        # PageRank normalization
+        if self.pagerank_dict:
+            pr_values = list(self.pagerank_dict.values())
+            self.pr_max = max(pr_values)
+            self.pr_min = min(pr_values)
+            self.pr_range = self.pr_max - self.pr_min if self.pr_max > self.pr_min else 1.0
+        else:
+            self.pr_max, self.pr_min, self.pr_range = 1.0, 0.0, 1.0
+        
+        # PageViews normalization
+        self.pv_max = max(self.pageviews_dict.values()) if self.pageviews_dict else 1.0
+
+        # Precompute document lengths and averages
+        self.text_doc_lengths = self.text_index.DL if hasattr(self.text_index, 'DL') else {}
+        self.text_avg_dl = sum(self.text_doc_lengths.values()) / len(self.text_doc_lengths) if self.text_doc_lengths else DEFAULT_AVGDL
+    
+        self.title_doc_lengths = self.title_index.DL if hasattr(self.title_index, 'DL') else {}
+        self.title_avg_dl = sum(self.title_doc_lengths.values()) / len(self.title_doc_lengths) if self.title_doc_lengths else DEFAULT_AVGDL
+
+    def _normalize_ann_scores(self, scores: Counter) -> Dict[int, float]:
+        """Normalize ANN scores (cosine similarities) to [0, 1] range."""
+        if not scores:
+            return {}
+        # Cosine similarities are in [-1, 1], but typically positive for similar docs
+        max_score = max(scores.values())
+        min_score = min(scores.values())
+        score_range = max_score - min_score
+        if score_range > 0:
+            return {doc_id: (s - min_score) / score_range for doc_id, s in scores.items()}
+        return {doc_id: 1.0 for doc_id in scores}  # All same score
     
     def _norm_pr(self, doc_id: int) -> float:
         """Get normalized PageRank [0, 1]."""

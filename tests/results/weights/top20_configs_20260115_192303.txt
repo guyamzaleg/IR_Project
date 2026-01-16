@@ -1,0 +1,63 @@
+TOP 20 CONFIGURATIONS
+====================================================================================================
+
+#1: weights_textbm250.80_titlebm250.20_pv0.00_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5228 | P@10=0.7300 | Time=0.413s
+
+#2: weights_textbm250.80_titlebm250.20_pv0.10_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5228 | P@10=0.7300 | Time=0.414s
+
+#3: weights_textbm250.80_titlebm250.20_pv0.05_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5228 | P@10=0.7300 | Time=0.414s
+
+#4: weights_textbm250.60_titlebm250.10_pv0.05_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5279 | P@10=0.7167 | Time=0.432s
+
+#5: weights_textbm250.60_titlebm250.10_pv0.00_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5279 | P@10=0.7167 | Time=0.429s
+
+#6: weights_textbm250.60_titlebm250.10_pv0.10_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5279 | P@10=0.7167 | Time=0.430s
+
+#7: weights_textbm250.80_titlebm250.10_pv0.10_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5093 | P@10=0.7133 | Time=0.413s
+
+#8: weights_textbm250.80_titlebm250.10_pv0.10_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5162 | P@10=0.7133 | Time=0.416s
+
+#9: weights_textbm250.80_titlebm250.10_pv0.05_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5093 | P@10=0.7133 | Time=0.416s
+
+#10: weights_textbm250.80_titlebm250.10_pv0.05_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5162 | P@10=0.7133 | Time=0.414s
+
+#11: weights_textbm250.60_titlebm250.10_pv0.00_textann0.05_titleann0.20
+     HM(P@5,F1@30)=0.5109 | P@10=0.7133 | Time=0.421s
+
+#12: weights_textbm250.80_titlebm250.10_pv0.00_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5093 | P@10=0.7133 | Time=0.419s
+
+#13: weights_textbm250.60_titlebm250.10_pv0.10_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5123 | P@10=0.7133 | Time=0.428s
+
+#14: weights_textbm250.60_titlebm250.10_pv0.10_textann0.05_titleann0.20
+     HM(P@5,F1@30)=0.5109 | P@10=0.7133 | Time=0.429s
+
+#15: weights_textbm250.60_titlebm250.10_pv0.05_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5123 | P@10=0.7133 | Time=0.436s
+
+#16: weights_textbm250.60_titlebm250.10_pv0.05_textann0.05_titleann0.20
+     HM(P@5,F1@30)=0.5109 | P@10=0.7133 | Time=0.429s
+
+#17: weights_textbm250.60_titlebm250.10_pv0.00_textann0.15_titleann0.05
+     HM(P@5,F1@30)=0.5123 | P@10=0.7133 | Time=0.426s
+
+#18: weights_textbm250.80_titlebm250.10_pv0.00_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5162 | P@10=0.7133 | Time=0.416s
+
+#19: weights_textbm250.80_titlebm250.20_pv0.05_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5300 | P@10=0.7100 | Time=0.416s
+
+#20: weights_textbm250.80_titlebm250.20_pv0.00_textann0.05_titleann0.05
+     HM(P@5,F1@30)=0.5300 | P@10=0.7100 | Time=0.416s
+
