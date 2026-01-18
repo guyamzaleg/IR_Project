@@ -1,9 +1,9 @@
 INSTANCE_NAME="instance-1"
 REGION=us-central1
 ZONE=us-central1-c
-PROJECT_NAME="YOUR_PROJECT_NAME_HERE"
+PROJECT_NAME="information-retrieval-480415"
 IP_NAME="$PROJECT_NAME-ip"
-GOOGLE_ACCOUNT_NAME="YOUR_ACCOUNT_NAME_HERE" # without the @post.bgu.ac.il or @gmail.com part
+GOOGLE_ACCOUNT_NAME="amzalegg" # without the @post.bgu.ac.il or @gmail.com part
 
 # 0. Install Cloud SDK on your local machine or using Could Shell
 # check that you have a proper active account listed
@@ -43,8 +43,8 @@ gcloud compute instances tail-serial-port-output $INSTANCE_NAME --zone $ZONE
 # Verify that the instance is running
 gcloud compute instances list --filter="name=$INSTANCE_NAME" --format="table(name,status,zone,EXTERNAL_IP)"
 
-# 4. Secure copy your app to the VM (assume search_frontend.py is available in the current directory)
-gcloud compute scp ./search_frontend.py \
+# 4. Secure copy your app to the VM
+gcloud compute scp --recurse ./search_frontend.py ./query_engine.py ./inverted_index_gcp.py ./Backend ./Frontend ./data \
   ${GOOGLE_ACCOUNT_NAME}@${INSTANCE_NAME}:/home/${GOOGLE_ACCOUNT_NAME} \
   --zone ${ZONE}
 

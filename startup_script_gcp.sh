@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-APP_USER="shhara"
+APP_USER="amzalegg"
 APP_HOME="/home/${APP_USER}"
 VENV_DIR="${APP_HOME}/venv"
 
@@ -20,5 +20,8 @@ pip install \
   'nltk==3.6.3' \
   'pandas' \
   'google-cloud-storage' \
-  'numpy>=1.23.2,<3'
+  'numpy>=1.23.2,<3' \
+  'faiss-cpu' \
+  'gensim' \
+  'requests'
 "
